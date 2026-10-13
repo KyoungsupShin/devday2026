@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모듈 5 · 내 문서 그라운딩 (AI Core Grounding)</title><style>
+:root { --bg:#fff; --fg:#1a1a1a; --muted:#5b6671; --border:#e3e8ee; --accent:#0a6ed1;
+  --accent-soft:#eaf3fb; --code-bg:#f6f8fa; --th-bg:#f2f5f8; --quote-bg:#f7f9fb; --quote-bar:#0a6ed1; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1115; --fg:#e6e8eb; --muted:#9aa4af; --border:#2a2f37; --accent:#4aa3ff;
+  --accent-soft:#15202b; --code-bg:#161a20; --th-bg:#1a1f27; --quote-bg:#151a21; --quote-bar:#4aa3ff; } }
+:root[data-theme="dark"]{ --bg:#0f1115; --fg:#e6e8eb; --muted:#9aa4af; --border:#2a2f37; --accent:#4aa3ff;
+  --accent-soft:#15202b; --code-bg:#161a20; --th-bg:#1a1f27; --quote-bg:#151a21; --quote-bar:#4aa3ff; }
+*{box-sizing:border-box;} html{-webkit-text-size-adjust:100%;}
+body{background:var(--bg);color:var(--fg);margin:0;font-size:16px;line-height:1.7;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",Roboto,sans-serif;}
+.wrap{max-width:860px;margin:0 auto;padding:24px 16px 96px;}
+.topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;
+  display:flex;gap:12px;align-items:center;font-size:13px;color:var(--muted);z-index:10;}
+.topbar a{color:var(--accent);text-decoration:none;}
+.topbar .crumb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .topbar .spacer{flex:1;}
+h1,h2,h3,h4{line-height:1.3;font-weight:700;} h1{font-size:1.8rem;margin:.2em 0 .6em;}
+h2{font-size:1.35rem;margin:1.8em 0 .5em;padding-top:.6em;border-top:1px solid var(--border);}
+h3{font-size:1.12rem;margin:1.3em 0 .4em;color:var(--accent);} h4{font-size:1rem;margin:1.1em 0 .3em;}
+p,li{font-size:1rem;} a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere;word-break:break-word;}
+a:hover{text-decoration:underline;opacity:.85;}
+td a,th a{overflow-wrap:anywhere;word-break:break-all;}
+code{font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;background:var(--code-bg);
+  padding:.12em .38em;border-radius:5px;font-size:.9em;}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;
+  overflow-x:auto;font-size:.82rem;line-height:1.45;} pre code{background:none;padding:0;}
+.codehilite{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:2px 14px;overflow-x:auto;margin:1em 0;}
+.codehilite pre{border:none;background:none;padding:12px 0;margin:0;}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.93rem;display:block;overflow-x:auto;}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top;} th{background:var(--th-bg);font-weight:600;}
+blockquote{margin:1em 0;padding:10px 16px;background:var(--quote-bg);border-left:4px solid var(--quote-bar);border-radius:0 8px 8px 0;}
+blockquote p{margin:.3em 0;} hr{border:none;border-top:1px solid var(--border);margin:2em 0;}
+ul,ol{padding-left:1.5em;} li{margin:.25em 0;}
+li.task{list-style:none;margin-left:-1.3em;} li.task input{margin-right:.5em;}
+.theme-toggle{cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:12px;}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) {pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #49483e }
+.codehilite { background: #272822; color: #F8F8F2 }
+.codehilite .c { color: #959077 } /* Comment */
+.codehilite .err { color: #ED007E; background-color: #1E0010 } /* Error */
+.codehilite .esc { color: #F8F8F2 } /* Escape */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #66D9EF } /* Keyword */
+.codehilite .l { color: #AE81FF } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF4689 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #959077 } /* Comment.Hashbang */
+.codehilite .cm { color: #959077 } /* Comment.Multiline */
+.codehilite .cp { color: #959077 } /* Comment.Preproc */
+.codehilite .cpf { color: #959077 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #959077 } /* Comment.Single */
+.codehilite .cs { color: #959077 } /* Comment.Special */
+.codehilite .gd { color: #FF4689 } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FF4689 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2 } /* Generic.Heading */
+.codehilite .gi { color: #A6E22E } /* Generic.Inserted */
+.codehilite .go { color: #66D9EF } /* Generic.Output */
+.codehilite .gp { color: #FF4689; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #959077 } /* Generic.Subheading */
+.codehilite .gt { color: #66D9EF } /* Generic.Traceback */
+.codehilite .kc { color: #66D9EF } /* Keyword.Constant */
+.codehilite .kd { color: #66D9EF } /* Keyword.Declaration */
+.codehilite .kn { color: #FF4689 } /* Keyword.Namespace */
+.codehilite .kp { color: #66D9EF } /* Keyword.Pseudo */
+.codehilite .kr { color: #66D9EF } /* Keyword.Reserved */
+.codehilite .kt { color: #66D9EF } /* Keyword.Type */
+.codehilite .ld { color: #E6DB74 } /* Literal.Date */
+.codehilite .m { color: #AE81FF } /* Literal.Number */
+.codehilite .s { color: #E6DB74 } /* Literal.String */
+.codehilite .na { color: #A6E22E } /* Name.Attribute */
+.codehilite .nb { color: #A6E22E } /* Name.Builtin */
+.codehilite .nc { color: #A6E22E } /* Name.Class */
+.codehilite .no { color: #66D9EF } /* Name.Constant */
+.codehilite .nd { color: #A6E22E } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #A6E22E } /* Name.Exception */
+.codehilite .nf { color: #A6E22E } /* Name.Function */
+.codehilite .nl { color: #F8F8F2 } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #A6E22E } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF4689 } /* Name.Tag */
+.codehilite .nv { color: #F8F8F2 } /* Name.Variable */
+.codehilite .ow { color: #FF4689 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #AE81FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #AE81FF } /* Literal.Number.Float */
+.codehilite .mh { color: #AE81FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #AE81FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #AE81FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #E6DB74 } /* Literal.String.Affix */
+.codehilite .sb { color: #E6DB74 } /* Literal.String.Backtick */
+.codehilite .sc { color: #E6DB74 } /* Literal.String.Char */
+.codehilite .dl { color: #E6DB74 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #E6DB74 } /* Literal.String.Doc */
+.codehilite .s2 { color: #E6DB74 } /* Literal.String.Double */
+.codehilite .se { color: #AE81FF } /* Literal.String.Escape */
+.codehilite .sh { color: #E6DB74 } /* Literal.String.Heredoc */
+.codehilite .si { color: #E6DB74 } /* Literal.String.Interpol */
+.codehilite .sx { color: #E6DB74 } /* Literal.String.Other */
+.codehilite .sr { color: #E6DB74 } /* Literal.String.Regex */
+.codehilite .s1 { color: #E6DB74 } /* Literal.String.Single */
+.codehilite .ss { color: #E6DB74 } /* Literal.String.Symbol */
+.codehilite .bp { color: #A6E22E } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #A6E22E } /* Name.Function.Magic */
+.codehilite .vc { color: #F8F8F2 } /* Name.Variable.Class */
+.codehilite .vg { color: #F8F8F2 } /* Name.Variable.Global */
+.codehilite .vi { color: #F8F8F2 } /* Name.Variable.Instance */
+.codehilite .vm { color: #F8F8F2 } /* Name.Variable.Magic */
+.codehilite .il { color: #AE81FF } /* Literal.Number.Integer.Long */}}
+[data-theme="dark"] {pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #49483e }
+.codehilite { background: #272822; color: #F8F8F2 }
+.codehilite .c { color: #959077 } /* Comment */
+.codehilite .err { color: #ED007E; background-color: #1E0010 } /* Error */
+.codehilite .esc { color: #F8F8F2 } /* Escape */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #66D9EF } /* Keyword */
+.codehilite .l { color: #AE81FF } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF4689 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #959077 } /* Comment.Hashbang */
+.codehilite .cm { color: #959077 } /* Comment.Multiline */
+.codehilite .cp { color: #959077 } /* Comment.Preproc */
+.codehilite .cpf { color: #959077 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #959077 } /* Comment.Single */
+.codehilite .cs { color: #959077 } /* Comment.Special */
+.codehilite .gd { color: #FF4689 } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FF4689 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2 } /* Generic.Heading */
+.codehilite .gi { color: #A6E22E } /* Generic.Inserted */
+.codehilite .go { color: #66D9EF } /* Generic.Output */
+.codehilite .gp { color: #FF4689; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #959077 } /* Generic.Subheading */
+.codehilite .gt { color: #66D9EF } /* Generic.Traceback */
+.codehilite .kc { color: #66D9EF } /* Keyword.Constant */
+.codehilite .kd { color: #66D9EF } /* Keyword.Declaration */
+.codehilite .kn { color: #FF4689 } /* Keyword.Namespace */
+.codehilite .kp { color: #66D9EF } /* Keyword.Pseudo */
+.codehilite .kr { color: #66D9EF } /* Keyword.Reserved */
+.codehilite .kt { color: #66D9EF } /* Keyword.Type */
+.codehilite .ld { color: #E6DB74 } /* Literal.Date */
+.codehilite .m { color: #AE81FF } /* Literal.Number */
+.codehilite .s { color: #E6DB74 } /* Literal.String */
+.codehilite .na { color: #A6E22E } /* Name.Attribute */
+.codehilite .nb { color: #A6E22E } /* Name.Builtin */
+.codehilite .nc { color: #A6E22E } /* Name.Class */
+.codehilite .no { color: #66D9EF } /* Name.Constant */
+.codehilite .nd { color: #A6E22E } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #A6E22E } /* Name.Exception */
+.codehilite .nf { color: #A6E22E } /* Name.Function */
+.codehilite .nl { color: #F8F8F2 } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #A6E22E } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF4689 } /* Name.Tag */
+.codehilite .nv { color: #F8F8F2 } /* Name.Variable */
+.codehilite .ow { color: #FF4689 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #AE81FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #AE81FF } /* Literal.Number.Float */
+.codehilite .mh { color: #AE81FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #AE81FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #AE81FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #E6DB74 } /* Literal.String.Affix */
+.codehilite .sb { color: #E6DB74 } /* Literal.String.Backtick */
+.codehilite .sc { color: #E6DB74 } /* Literal.String.Char */
+.codehilite .dl { color: #E6DB74 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #E6DB74 } /* Literal.String.Doc */
+.codehilite .s2 { color: #E6DB74 } /* Literal.String.Double */
+.codehilite .se { color: #AE81FF } /* Literal.String.Escape */
+.codehilite .sh { color: #E6DB74 } /* Literal.String.Heredoc */
+.codehilite .si { color: #E6DB74 } /* Literal.String.Interpol */
+.codehilite .sx { color: #E6DB74 } /* Literal.String.Other */
+.codehilite .sr { color: #E6DB74 } /* Literal.String.Regex */
+.codehilite .s1 { color: #E6DB74 } /* Literal.String.Single */
+.codehilite .ss { color: #E6DB74 } /* Literal.String.Symbol */
+.codehilite .bp { color: #A6E22E } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #A6E22E } /* Name.Function.Magic */
+.codehilite .vc { color: #F8F8F2 } /* Name.Variable.Class */
+.codehilite .vg { color: #F8F8F2 } /* Name.Variable.Global */
+.codehilite .vi { color: #F8F8F2 } /* Name.Variable.Instance */
+.codehilite .vm { color: #F8F8F2 } /* Name.Variable.Magic */
+.codehilite .il { color: #AE81FF } /* Literal.Number.Integer.Long */}
+</style></head>
+<body>
+<div class="topbar"><a href="../index.html">⌂ 인덱스</a><span class="crumb">실습자용 / 05-AI-Core-Grounding</span>
+<span class="spacer"></span><button class="theme-toggle" onclick="tog()">◐ 테마</button></div>
+<div class="wrap">
+<h1 id="5-ai-core-grounding">모듈 5 · 내 문서 그라운딩 (AI Core Grounding)</h1>
+<p>🎯 <strong>목표</strong>: 내 문서를 <strong>AI Core의 관리형 Grounding(벡터 저장소)</strong> 에 올려두고, 모듈 4 코드에서 <strong>필터만 바꿔</strong> SDK로 질의한다.
+⏱️ <strong>시간</strong>: 약 35분
+📓 기반: 노트북 07(Grounding Management) + 09(SDK 소비)</p>
+<hr />
+<h2 id="_1">배경 — 소스만 바꾸면 "내 문서 챗봇"</h2>
+<p>모듈 4는 공개 저장소 <code>help.sap.com</code> 에 그라운딩했습니다. 하지만 실무에서 진짜 필요한 건 <strong>우리 회사 문서</strong>(매뉴얼·규정·제품 스펙)에 기반한 답변이죠. 이 모듈은 <strong>같은 메커니즘을 내 문서에</strong> 적용합니다.</p>
+<p>좋은 소식: 벡터 데이터베이스(HANA 등)를 직접 구축할 필요가 없습니다. <strong>AI Core가 관리하는 벡터 저장소</strong>에 문서를 한 번 넣어두면, 청킹(문서 쪼개기)·임베딩·검색을 <strong>AI Core가 알아서</strong> 해줍니다.</p>
+<div class="codehilite"><pre><span></span><code>① 수집 (강사가 사전 수행)
+   내 문서(PDF 등) → AI Core Grounding 벡터 저장소에 적재
+                     (문서 쪼개기 + 임베딩은 AI Core가 수행)
+
+② 질의 (여러분이 실습)
+   모듈 4 코드에서 grounding 필터만 '내 저장소'로 지정 → SDK로 호출
+</code></pre></div>
+
+<blockquote>
+<p>핵심은 <strong>"코드는 모듈 4와 거의 같고, 그라운딩 필터만 바뀐다"</strong> 입니다. <code>data_repository_type</code> 을 <code>help.sap.com</code> → <code>vector</code> 로, 그리고 <strong>내 저장소 id</strong>를 지정하는 것뿐입니다.</p>
+<p>이 과정의 문서 묶음(corpus)은 <code>documents/</code> 폴더의 <strong>SDK 레퍼런스 PDF들</strong>입니다. 모듈 4(공개)와 <strong>같은 질문</strong>을 던져 "내 문서 기반 답변"이 어떻게 다른지 비교해보세요.</p>
+</blockquote>
+<h2 id="part-a">Part A. 저장소 준비 (대부분 강사가 사전 완료)</h2>
+<p><strong>단일 공유 AI Core</strong> 환경에서는 강사가 <strong>공유 벡터 저장소 1개</strong>를 미리 만들고 문서를 수집해 둔 뒤, <strong>저장소 id</strong>를 공유합니다. 참가자는 그 id만 받으면 됩니다.</p>
+<blockquote>
+<p>수집(ingestion)은 <strong>Grounding Vector API</strong>(REST)로 합니다. 강사는 저장소 폴더의 <code>ingest_documents.py</code>(저장소 생성 → PDF 청킹 → 수집 → 검색 확인)를 한 번 실행해 두고, 출력된 collection id 를 공유합니다. 그래서 참가자 실습은 <strong>질의(SDK)</strong> 에 집중합니다.</p>
+</blockquote>
+<p>받을 값: <strong><code>GROUNDING_REPOSITORY_ID</code></strong> (= 수집으로 만든 collection id, 강사 공유)</p>
+<h2 id="part-b-sdk">Part B. 내 저장소에 SDK로 질의</h2>
+<p>모듈 4 코드를 거의 그대로 쓰고, <strong>필터만</strong> 내 저장소로 바꿉니다.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">init_env</span><span class="o">,</span><span class="w"> </span><span class="nn">variables</span>
+<span class="n">init_env</span><span class="o">.</span><span class="n">set_environment_variables</span><span class="p">()</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.models.llm_model_details</span><span class="w"> </span><span class="kn">import</span> <span class="n">LLMModelDetails</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.models.config</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModuleConfig</span><span class="p">,</span> <span class="n">OrchestrationConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.models.document_grounding</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DocumentGroundingFilter</span><span class="p">,</span> <span class="n">DocumentGroundingConfig</span><span class="p">,</span>
+    <span class="n">DocumentGroundingPlaceholders</span><span class="p">,</span> <span class="n">GroundingModuleConfig</span><span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.models.template</span><span class="w"> </span><span class="kn">import</span> <span class="n">Template</span><span class="p">,</span> <span class="n">PromptTemplatingModuleConfig</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.models.message</span><span class="w"> </span><span class="kn">import</span> <span class="n">SystemMessage</span><span class="p">,</span> <span class="n">UserMessage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">gen_ai_hub.orchestration_v2.service</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrchestrationService</span>
+
+<span class="n">llm</span> <span class="o">=</span> <span class="n">LLMModelDetails</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">"gpt-5.6-sol"</span><span class="p">)</span>
+
+<span class="n">template</span> <span class="o">=</span> <span class="n">Template</span><span class="p">(</span><span class="n">template</span><span class="o">=</span><span class="p">[</span>
+    <span class="n">SystemMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">"You are a helpful assistant. Answer only from the provided context."</span><span class="p">),</span>
+    <span class="n">UserMessage</span><span class="p">(</span><span class="n">content</span><span class="o">=</span><span class="s2">"""Request: {{?user_query}}</span>
+<span class="s2">        Context: {{?grounding_response}}</span>
+<span class="s2">        """</span><span class="p">),</span>
+<span class="p">])</span>
+
+<span class="c1"># ★ 핵심: help.sap.com 대신 내 벡터 저장소를 지정</span>
+<span class="n">GROUNDING_REPOSITORY_ID</span> <span class="o">=</span> <span class="s2">"&lt;강사가 공유한 저장소 id&gt;"</span>
+
+<span class="n">filters</span> <span class="o">=</span> <span class="p">[</span><span class="n">DocumentGroundingFilter</span><span class="p">(</span>
+    <span class="nb">id</span><span class="o">=</span><span class="s2">"MyDocs"</span><span class="p">,</span>
+    <span class="n">data_repository_type</span><span class="o">=</span><span class="s2">"vector"</span><span class="p">,</span>              <span class="c1"># ← 모듈 4는 "help.sap.com", 여기선 "vector"(내 저장소)</span>
+    <span class="n">data_repositories</span><span class="o">=</span><span class="p">[</span><span class="n">GROUNDING_REPOSITORY_ID</span><span class="p">]</span> <span class="c1"># ← 검색할 내 저장소 id (강사 공유)</span>
+<span class="p">)]</span>
+<span class="c1"># ↑ 모듈 4와 비교해 '이 세 줄'만 달라졌습니다. 나머지는 사실상 동일!</span>
+
+<span class="n">grounding_config</span> <span class="o">=</span> <span class="n">GroundingModuleConfig</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">DocumentGroundingConfig</span><span class="p">(</span>
+    <span class="n">filters</span><span class="o">=</span><span class="n">filters</span><span class="p">,</span>
+    <span class="n">placeholders</span><span class="o">=</span><span class="n">DocumentGroundingPlaceholders</span><span class="p">(</span><span class="nb">input</span><span class="o">=</span><span class="p">[</span><span class="s2">"user_query"</span><span class="p">],</span> <span class="n">output</span><span class="o">=</span><span class="s2">"grounding_response"</span><span class="p">),</span>
+<span class="p">))</span>
+
+<span class="n">prompt_template</span> <span class="o">=</span> <span class="n">PromptTemplatingModuleConfig</span><span class="p">(</span><span class="n">prompt</span><span class="o">=</span><span class="n">template</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">llm</span><span class="p">)</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">OrchestrationConfig</span><span class="p">(</span><span class="n">modules</span><span class="o">=</span><span class="n">ModuleConfig</span><span class="p">(</span>
+    <span class="n">prompt_templating</span><span class="o">=</span><span class="n">prompt_template</span><span class="p">,</span> <span class="n">grounding</span><span class="o">=</span><span class="n">grounding_config</span><span class="p">))</span>
+
+<span class="n">service</span> <span class="o">=</span> <span class="n">OrchestrationService</span><span class="p">(</span><span class="n">api_url</span><span class="o">=</span><span class="n">variables</span><span class="o">.</span><span class="n">AICORE_ORCHESTRATION_DEPLOYMENT_URL</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
+<span class="n">resp</span> <span class="o">=</span> <span class="n">service</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">placeholder_values</span><span class="o">=</span><span class="p">{</span><span class="s2">"user_query"</span><span class="p">:</span> <span class="s2">"What is data masking in the orchestration service?"</span><span class="p">})</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">final_result</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">)</span>
+</code></pre></div>
+
+<blockquote>
+<p><code>data_repositories</code> 를 비우면 해당 타입의 모든 저장소를 검색합니다. 특정 저장소만 보려면 id를 지정하세요.</p>
+</blockquote>
+<h2 id="ui">검색된 청크 보기 (UI 없이 — 코드로)</h2>
+<p>LLM이 <strong>답하기 전에</strong> 그라운딩이 실제로 어떤 청크를 찾았는지 직접 볼 수 있습니다 (Launchpad의 Run Search를 코드로):</p>
+<div class="codehilite"><pre><span></span><code>python<span class="w"> </span>inspect_aicore.py<span class="w"> </span>search<span class="w"> </span>&lt;내<span class="w"> </span>저장소<span class="w"> </span>id&gt;<span class="w"> </span><span class="s2">"What is data masking in the orchestration service?"</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>[검색] 'What is data masking...' → collection=...
+  [1] score=0.630  Orchestration data masking anonymizes PII like names, emails ...
+</code></pre></div>
+
+<p>→ 점수(score)와 함께 검색된 청크가 보입니다. "왜 이렇게 답했는지"를 근거 단계에서 확인하는 용도. 저장소 문서 목록은 <code>python inspect_aicore.py documents &lt;id&gt;</code> 로 확인합니다.</p>
+<h2 id="_2">직접 바꿔보기 (실험)</h2>
+<ul>
+<li><strong>검색된 청크 보기</strong>: 질문을 바꿔가며 <code>inspect_aicore.py search</code> 로 어떤 청크가 검색되는지(score 변화) 관찰</li>
+<li><strong>공개 vs 내 문서 비교</strong>: 같은 질문을 모듈 4(<code>help.sap.com</code>)와 이 모듈(<code>vector</code> + 내 저장소)로 던져 답·출처 비교</li>
+<li><strong>질문 바꾸기</strong>: <code>documents/</code> PDF(Orchestration·Grounding SDK 문서)에 있을 법한 질문들</li>
+<li>템플릿에 "context에 없으면 '문서에 없음'이라고 답하라" 추가 → 환각 억제</li>
+<li>(심화) <code>GroundingSearchConfig</code> 의 <code>max_document_count</code> 로 검색 청크 수 조절</li>
+</ul>
+<h2 id="_3">✅ 체크포인트</h2>
+<ul>
+<li class="task"><input type="checkbox" disabled> 내 저장소 id로 그라운딩 질의가 동작한다</li>
+<li class="task"><input type="checkbox" disabled> 같은 질문의 공개(help.sap.com) vs 내 문서 답변 차이를 확인했다</li>
+<li class="task"><input type="checkbox" disabled> 필터만 바꿔 소스를 전환할 수 있음을 이해했다</li>
+</ul>
+</div>
+<script>
+function tog(){var r=document.documentElement;var c=r.getAttribute('data-theme');
+var n=c==='dark'?'light':(c==='light'?'':'dark');r.setAttribute('data-theme',n);
+try{localStorage.setItem('codejam-theme',n)}catch(e){}}
+try{var s=localStorage.getItem('codejam-theme');if(s)document.documentElement.setAttribute('data-theme',s)}catch(e){}
+</script>
+</body></html>

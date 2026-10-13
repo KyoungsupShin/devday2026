@@ -1,0 +1,24 @@
+# === 비밀값 — 절대 커밋 금지 ===
+.env
+**/.env
+*.key
+*secret*.json
+service*key*.json
+
+# === Python ===
+.venv/
+**/.venv/
+.venv-validate/
+.build-venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# === 실행/검증 산출물 ===
+validation_results.json
+results/
+**/results/
+
+# === OS/에디터 ===
+.DS_Store
+**/.DS_Store

@@ -1,0 +1,178 @@
+====================================================================
+ SAP Generative AI Hub 핸즈온 — 실습 전 준비사항 (구성 안내)
+====================================================================
+
+실습 시작 전에 아래 항목을 본인 노트북에 "미리 설치/준비"해 오세요.
+특히 ② Python 패키지(SDK 등)는 당일 설치하면 시간이 오래 걸리므로
+반드시 집/사무실에서 미리 설치를 끝낸 상태로 오시기 바랍니다.
+버전까지 그대로 맞추면 트러블슈팅이 거의 없습니다.
+
+
+--------------------------------------------------------------------
+ ① 개발툴 — Visual Studio Code
+--------------------------------------------------------------------
+
+[ 권장 사양 ]
+  - 프로그램   : Visual Studio Code (최신 Stable)
+  - 권장 버전  : 1.90 이상 (2024.5 이후)
+  - 버전 확인  : code --version   (또는 상단 메뉴 Code → About)
+  - 다운로드   : https://code.visualstudio.com/download
+
+[ 설치 방법 (OS별) ]
+  · Windows
+      1) https://code.visualstudio.com/download 접속 → "Windows" 버튼
+      2) 받은 VSCodeUserSetup-x64-*.exe 실행
+      3) 설치 중 "Add to PATH" 체크 (기본 체크됨) → 마침
+
+  · macOS
+      1) https://code.visualstudio.com/download 접속 → "Mac" 버튼
+         (Apple Silicon = Apple silicon, Intel = Intel chip)
+      2) 받은 .zip 압축 해제
+      3) "Visual Studio Code.app" 을 "응용 프로그램" 폴더로 드래그 → 실행
+      4) code 명령어 등록: VSCode에서 Cmd+Shift+P →
+         "Shell Command: Install 'code' command in PATH" 실행
+
+[ 설치할 VSCode 확장 (Extensions) ]
+  - Python   (Microsoft)  ID: ms-python.python
+      https://marketplace.visualstudio.com/items?itemName=ms-python.python
+  - Jupyter  (Microsoft)  ID: ms-toolsai.jupyter
+      https://marketplace.visualstudio.com/items?itemName=ms-toolsai.jupyter
+  - Pylance  (Microsoft)  ID: ms-python.vscode-pylance
+      https://marketplace.visualstudio.com/items?itemName=ms-python.vscode-pylance
+
+[ 확장 설치 방법 (둘 중 택 1) ]
+  1) UI로: 왼쪽 사이드바 네모 4개 아이콘(Extensions, Cmd/Ctrl+Shift+X)
+          → 검색창에 위 ID 붙여넣기 → Install
+  2) 터미널로 (한 번에 3개 설치):
+          code --install-extension ms-python.python
+          code --install-extension ms-toolsai.jupyter
+          code --install-extension ms-python.vscode-pylance
+
+
+--------------------------------------------------------------------
+ ② 실행 환경 — Python
+--------------------------------------------------------------------
+
+[ 권장 버전 ]
+  - 권장      : Python 3.11.x 또는 3.12.x  (가장 안정적으로 검증됨)
+  - 최소 지원 : Python 3.9 이상  (SDK sap-ai-sdk-gen 요구사항 >=3.9)
+  - 피할 버전 : 3.14 등 너무 최신 버전
+               (일부 라이브러리 wheel 미제공으로 설치 에러 가능)
+  - 다운로드  : https://www.python.org/downloads/
+  - 버전 확인 : python3 --version (macOS) / python --version (Windows)
+               예) Python 3.12.7
+
+[ 설치 방법 (OS별) ]
+  · Windows
+      1) https://www.python.org/downloads/ → Python 3.12.x 설치파일(.exe) 다운
+      2) 실행 화면 맨 아래 "Add python.exe to PATH" 체크
+      3) Install Now → 확인: python --version
+
+  · macOS (둘 중 택 1)
+      - 공식 설치파일:
+          https://www.python.org/downloads/macos/
+          → Python 3.12.x "macOS 64-bit universal2 installer" 다운 → 실행
+      - Homebrew:
+          brew install python@3.12   (먼저 https://brew.sh/ 설치)
+          확인: python3.12 --version
+
+[ SW 라이브러리는 Python 패키지만 있으면 되나요? → 예, 그렇습니다 ]
+  이 실습은 100% Python 코드로 돌아갑니다. 별도의 시스템 소프트웨어
+  (데이터베이스 엔진, Node.js, Java/JDK, Docker 등)는 "필요 없습니다".
+  필요한 것은 Python 본체 + venv + pip (venv·pip는 Python에 기본 포함)
+  그리고 "아래 Python 패키지(SDK 등)"입니다.
+
+[ ★ 중요 — SDK 등 Python 패키지도 "실습 전에 미리 설치"해 오세요 ]
+  당일 현장에서 설치하면 네트워크 혼잡/설치 지연으로 시간이 많이 걸립니다.
+  반드시 "집/사무실에서 미리" 아래 순서로 설치해 설치가 끝난 상태로 오세요.
+
+  (1) 가상환경 만들고 켜기
+      macOS:
+          python3 -m venv .venv
+          source .venv/bin/activate
+      Windows (PowerShell):
+          python -m venv .venv
+          .venv\Scripts\Activate.ps1
+      → 프롬프트 앞에 (.venv) 가 보이면 성공
+
+  (2) 패키지 설치 (둘 중 하나)
+      - 저장소에 requirements.txt 가 있으면:
+          pip install -r requirements.txt
+      - 없으면 직접:
+          pip install "sap-ai-sdk-gen>=5.11.0" numpy requests
+
+  (3) 설치 확인
+          pip show sap-ai-sdk-gen        (Version: 5.11.0 이상 확인)
+          python -c "import gen_ai_hub, numpy, requests; print('OK')"
+      → "OK" 가 출력되면 사전 설치 완료
+
+[ 미리 설치해야 할 핵심 Python 패키지 ]
+  - sap-ai-sdk-gen  5.11.0 이상 : SAP Generative AI Hub 공식 SDK ★필수
+                                  (구 generative-ai-hub-sdk 는 지원 종료)
+  - numpy           2.x        : 임베딩 코사인 유사도 계산 (모듈 2)
+  - requests        2.3x       : AI Core 토큰/REST 호출
+  - openai          2.x        : sap-ai-sdk-gen 의 의존성으로 함께 설치됨
+  (그 외 pydantic, httpx 등도 SDK 의존성으로 자동 포함)
+
+  ※ 이미 다른 Python 버전이 있어도 괜찮습니다. 실습은 프로젝트 전용
+     가상환경(.venv)을 만들어 그 안에서만 패키지를 설치하므로
+     시스템 파이썬을 건드리지 않습니다.
+
+
+--------------------------------------------------------------------
+ ③ 트러블슈팅용 LLM — 1개
+--------------------------------------------------------------------
+
+[ 준비 개수 ]
+  - 1개면 충분 (실습 중 에러 메시지를 붙여넣고 원인/해결을 물어보는 용도)
+  - 추천: GitHub Copilot Chat
+          → VSCode 안에서 코드/에러를 바로 질문 가능 (창 전환 불필요)
+
+[ 선택지별 준비 방법 (아무거나 1개만) ]
+  · GitHub Copilot Chat (추천)
+      VSCode 확장 GitHub.copilot + GitHub.copilot-chat 설치
+      → GitHub 계정 로그인
+      터미널: code --install-extension GitHub.copilot
+      링크: https://marketplace.visualstudio.com/items?itemName=GitHub.copilot
+
+  · ChatGPT
+      웹 브라우저에서 가입/로그인 (무료 티어 가능)
+      링크: https://chat.openai.com
+
+  · Google Gemini
+      구글 계정으로 로그인
+      링크: https://gemini.google.com
+
+  · Claude
+      가입/로그인
+      링크: https://claude.ai
+
+[ 사용 예 ]
+  빨간 에러가 나면 → 에러 메시지 전체를 복사 → LLM에 붙여넣고
+  "이 에러 원인과 해결법 알려줘" 라고 질문. 대부분 1~2번 만에 해결됩니다.
+
+
+--------------------------------------------------------------------
+ ②½ 저장소 받기 — Git  (권장)
+--------------------------------------------------------------------
+  실습 코드를 git clone 으로 받으려면 Git 이 필요합니다.
+  (ZIP 다운로드로 대체 가능하면 생략 가능)
+
+  - 버전 확인 : git --version
+  - Windows   : https://git-scm.com/download/win  (설치 후 재시작)
+  - macOS     : xcode-select --install   (또는 brew install git)
+  - 다운로드 : https://git-scm.com/downloads
+
+
+--------------------------------------------------------------------
+ ✅ 준비 완료 체크리스트
+--------------------------------------------------------------------
+  [ ] VSCode 설치됨 (code --version → 1.90 이상)
+  [ ] VSCode 확장 3개 설치됨 (Python / Jupyter / Pylance)
+  [ ] Python 3.11 또는 3.12 설치됨 (python3 --version)
+  [ ] Git 설치됨 (git --version)   ← ZIP 다운로드로 대체 시 생략 가능
+  [ ] 가상환경(.venv) 만들고 패키지 미리 설치 완료
+      → pip show sap-ai-sdk-gen 로 5.11.0 이상 확인
+      → python -c "import gen_ai_hub, numpy, requests; print('OK')" → OK
+  [ ] 트러블슈팅용 LLM 1개 로그인 완료
+====================================================================

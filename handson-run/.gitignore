@@ -1,0 +1,6 @@
+# 비밀값 — 절대 커밋 금지
+.env
+.venv/
+__pycache__/
+*.pyc
+results/

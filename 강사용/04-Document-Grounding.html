@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모듈 4 · Document Grounding + Streaming (강사용)</title><style>
+:root { --bg:#fff; --fg:#1a1a1a; --muted:#5b6671; --border:#e3e8ee; --accent:#0a6ed1;
+  --accent-soft:#eaf3fb; --code-bg:#f6f8fa; --th-bg:#f2f5f8; --quote-bg:#f7f9fb; --quote-bar:#0a6ed1; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1115; --fg:#e6e8eb; --muted:#9aa4af; --border:#2a2f37; --accent:#4aa3ff;
+  --accent-soft:#15202b; --code-bg:#161a20; --th-bg:#1a1f27; --quote-bg:#151a21; --quote-bar:#4aa3ff; } }
+:root[data-theme="dark"]{ --bg:#0f1115; --fg:#e6e8eb; --muted:#9aa4af; --border:#2a2f37; --accent:#4aa3ff;
+  --accent-soft:#15202b; --code-bg:#161a20; --th-bg:#1a1f27; --quote-bg:#151a21; --quote-bar:#4aa3ff; }
+*{box-sizing:border-box;} html{-webkit-text-size-adjust:100%;}
+body{background:var(--bg);color:var(--fg);margin:0;font-size:16px;line-height:1.7;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",Roboto,sans-serif;}
+.wrap{max-width:860px;margin:0 auto;padding:24px 16px 96px;}
+.topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;
+  display:flex;gap:12px;align-items:center;font-size:13px;color:var(--muted);z-index:10;}
+.topbar a{color:var(--accent);text-decoration:none;}
+.topbar .crumb{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;} .topbar .spacer{flex:1;}
+h1,h2,h3,h4{line-height:1.3;font-weight:700;} h1{font-size:1.8rem;margin:.2em 0 .6em;}
+h2{font-size:1.35rem;margin:1.8em 0 .5em;padding-top:.6em;border-top:1px solid var(--border);}
+h3{font-size:1.12rem;margin:1.3em 0 .4em;color:var(--accent);} h4{font-size:1rem;margin:1.1em 0 .3em;}
+p,li{font-size:1rem;} a{color:var(--accent);text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere;word-break:break-word;}
+a:hover{text-decoration:underline;opacity:.85;}
+td a,th a{overflow-wrap:anywhere;word-break:break-all;}
+code{font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;background:var(--code-bg);
+  padding:.12em .38em;border-radius:5px;font-size:.9em;}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;
+  overflow-x:auto;font-size:.82rem;line-height:1.45;} pre code{background:none;padding:0;}
+.codehilite{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:2px 14px;overflow-x:auto;margin:1em 0;}
+.codehilite pre{border:none;background:none;padding:12px 0;margin:0;}
+table{border-collapse:collapse;width:100%;margin:1em 0;font-size:.93rem;display:block;overflow-x:auto;}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top;} th{background:var(--th-bg);font-weight:600;}
+blockquote{margin:1em 0;padding:10px 16px;background:var(--quote-bg);border-left:4px solid var(--quote-bar);border-radius:0 8px 8px 0;}
+blockquote p{margin:.3em 0;} hr{border:none;border-top:1px solid var(--border);margin:2em 0;}
+ul,ol{padding-left:1.5em;} li{margin:.25em 0;}
+li.task{list-style:none;margin-left:-1.3em;} li.task input{margin-right:.5em;}
+.theme-toggle{cursor:pointer;background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:12px;}
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) {pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #49483e }
+.codehilite { background: #272822; color: #F8F8F2 }
+.codehilite .c { color: #959077 } /* Comment */
+.codehilite .err { color: #ED007E; background-color: #1E0010 } /* Error */
+.codehilite .esc { color: #F8F8F2 } /* Escape */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #66D9EF } /* Keyword */
+.codehilite .l { color: #AE81FF } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF4689 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #959077 } /* Comment.Hashbang */
+.codehilite .cm { color: #959077 } /* Comment.Multiline */
+.codehilite .cp { color: #959077 } /* Comment.Preproc */
+.codehilite .cpf { color: #959077 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #959077 } /* Comment.Single */
+.codehilite .cs { color: #959077 } /* Comment.Special */
+.codehilite .gd { color: #FF4689 } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FF4689 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2 } /* Generic.Heading */
+.codehilite .gi { color: #A6E22E } /* Generic.Inserted */
+.codehilite .go { color: #66D9EF } /* Generic.Output */
+.codehilite .gp { color: #FF4689; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #959077 } /* Generic.Subheading */
+.codehilite .gt { color: #66D9EF } /* Generic.Traceback */
+.codehilite .kc { color: #66D9EF } /* Keyword.Constant */
+.codehilite .kd { color: #66D9EF } /* Keyword.Declaration */
+.codehilite .kn { color: #FF4689 } /* Keyword.Namespace */
+.codehilite .kp { color: #66D9EF } /* Keyword.Pseudo */
+.codehilite .kr { color: #66D9EF } /* Keyword.Reserved */
+.codehilite .kt { color: #66D9EF } /* Keyword.Type */
+.codehilite .ld { color: #E6DB74 } /* Literal.Date */
+.codehilite .m { color: #AE81FF } /* Literal.Number */
+.codehilite .s { color: #E6DB74 } /* Literal.String */
+.codehilite .na { color: #A6E22E } /* Name.Attribute */
+.codehilite .nb { color: #A6E22E } /* Name.Builtin */
+.codehilite .nc { color: #A6E22E } /* Name.Class */
+.codehilite .no { color: #66D9EF } /* Name.Constant */
+.codehilite .nd { color: #A6E22E } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #A6E22E } /* Name.Exception */
+.codehilite .nf { color: #A6E22E } /* Name.Function */
+.codehilite .nl { color: #F8F8F2 } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #A6E22E } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF4689 } /* Name.Tag */
+.codehilite .nv { color: #F8F8F2 } /* Name.Variable */
+.codehilite .ow { color: #FF4689 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #AE81FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #AE81FF } /* Literal.Number.Float */
+.codehilite .mh { color: #AE81FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #AE81FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #AE81FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #E6DB74 } /* Literal.String.Affix */
+.codehilite .sb { color: #E6DB74 } /* Literal.String.Backtick */
+.codehilite .sc { color: #E6DB74 } /* Literal.String.Char */
+.codehilite .dl { color: #E6DB74 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #E6DB74 } /* Literal.String.Doc */
+.codehilite .s2 { color: #E6DB74 } /* Literal.String.Double */
+.codehilite .se { color: #AE81FF } /* Literal.String.Escape */
+.codehilite .sh { color: #E6DB74 } /* Literal.String.Heredoc */
+.codehilite .si { color: #E6DB74 } /* Literal.String.Interpol */
+.codehilite .sx { color: #E6DB74 } /* Literal.String.Other */
+.codehilite .sr { color: #E6DB74 } /* Literal.String.Regex */
+.codehilite .s1 { color: #E6DB74 } /* Literal.String.Single */
+.codehilite .ss { color: #E6DB74 } /* Literal.String.Symbol */
+.codehilite .bp { color: #A6E22E } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #A6E22E } /* Name.Function.Magic */
+.codehilite .vc { color: #F8F8F2 } /* Name.Variable.Class */
+.codehilite .vg { color: #F8F8F2 } /* Name.Variable.Global */
+.codehilite .vi { color: #F8F8F2 } /* Name.Variable.Instance */
+.codehilite .vm { color: #F8F8F2 } /* Name.Variable.Magic */
+.codehilite .il { color: #AE81FF } /* Literal.Number.Integer.Long */}}
+[data-theme="dark"] {pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #49483e }
+.codehilite { background: #272822; color: #F8F8F2 }
+.codehilite .c { color: #959077 } /* Comment */
+.codehilite .err { color: #ED007E; background-color: #1E0010 } /* Error */
+.codehilite .esc { color: #F8F8F2 } /* Escape */
+.codehilite .g { color: #F8F8F2 } /* Generic */
+.codehilite .k { color: #66D9EF } /* Keyword */
+.codehilite .l { color: #AE81FF } /* Literal */
+.codehilite .n { color: #F8F8F2 } /* Name */
+.codehilite .o { color: #FF4689 } /* Operator */
+.codehilite .x { color: #F8F8F2 } /* Other */
+.codehilite .p { color: #F8F8F2 } /* Punctuation */
+.codehilite .ch { color: #959077 } /* Comment.Hashbang */
+.codehilite .cm { color: #959077 } /* Comment.Multiline */
+.codehilite .cp { color: #959077 } /* Comment.Preproc */
+.codehilite .cpf { color: #959077 } /* Comment.PreprocFile */
+.codehilite .c1 { color: #959077 } /* Comment.Single */
+.codehilite .cs { color: #959077 } /* Comment.Special */
+.codehilite .gd { color: #FF4689 } /* Generic.Deleted */
+.codehilite .ge { color: #F8F8F2; font-style: italic } /* Generic.Emph */
+.codehilite .ges { color: #F8F8F2; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #FF4689 } /* Generic.Error */
+.codehilite .gh { color: #F8F8F2 } /* Generic.Heading */
+.codehilite .gi { color: #A6E22E } /* Generic.Inserted */
+.codehilite .go { color: #66D9EF } /* Generic.Output */
+.codehilite .gp { color: #FF4689; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { color: #F8F8F2; font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #959077 } /* Generic.Subheading */
+.codehilite .gt { color: #66D9EF } /* Generic.Traceback */
+.codehilite .kc { color: #66D9EF } /* Keyword.Constant */
+.codehilite .kd { color: #66D9EF } /* Keyword.Declaration */
+.codehilite .kn { color: #FF4689 } /* Keyword.Namespace */
+.codehilite .kp { color: #66D9EF } /* Keyword.Pseudo */
+.codehilite .kr { color: #66D9EF } /* Keyword.Reserved */
+.codehilite .kt { color: #66D9EF } /* Keyword.Type */
+.codehilite .ld { color: #E6DB74 } /* Literal.Date */
+.codehilite .m { color: #AE81FF } /* Literal.Number */
+.codehilite .s { color: #E6DB74 } /* Literal.String */
+.codehilite .na { color: #A6E22E } /* Name.Attribute */
+.codehilite .nb { color: #A6E22E } /* Name.Builtin */
+.codehilite .nc { color: #A6E22E } /* Name.Class */
+.codehilite .no { color: #66D9EF } /* Name.Constant */
+.codehilite .nd { color: #A6E22E } /* Name.Decorator */
+.codehilite .ni { color: #F8F8F2 } /* Name.Entity */
+.codehilite .ne { color: #A6E22E } /* Name.Exception */
+.codehilite .nf { color: #A6E22E } /* Name.Function */
+.codehilite .nl { color: #F8F8F2 } /* Name.Label */
+.codehilite .nn { color: #F8F8F2 } /* Name.Namespace */
+.codehilite .nx { color: #A6E22E } /* Name.Other */
+.codehilite .py { color: #F8F8F2 } /* Name.Property */
+.codehilite .nt { color: #FF4689 } /* Name.Tag */
+.codehilite .nv { color: #F8F8F2 } /* Name.Variable */
+.codehilite .ow { color: #FF4689 } /* Operator.Word */
+.codehilite .pm { color: #F8F8F2 } /* Punctuation.Marker */
+.codehilite .w { color: #F8F8F2 } /* Text.Whitespace */
+.codehilite .mb { color: #AE81FF } /* Literal.Number.Bin */
+.codehilite .mf { color: #AE81FF } /* Literal.Number.Float */
+.codehilite .mh { color: #AE81FF } /* Literal.Number.Hex */
+.codehilite .mi { color: #AE81FF } /* Literal.Number.Integer */
+.codehilite .mo { color: #AE81FF } /* Literal.Number.Oct */
+.codehilite .sa { color: #E6DB74 } /* Literal.String.Affix */
+.codehilite .sb { color: #E6DB74 } /* Literal.String.Backtick */
+.codehilite .sc { color: #E6DB74 } /* Literal.String.Char */
+.codehilite .dl { color: #E6DB74 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #E6DB74 } /* Literal.String.Doc */
+.codehilite .s2 { color: #E6DB74 } /* Literal.String.Double */
+.codehilite .se { color: #AE81FF } /* Literal.String.Escape */
+.codehilite .sh { color: #E6DB74 } /* Literal.String.Heredoc */
+.codehilite .si { color: #E6DB74 } /* Literal.String.Interpol */
+.codehilite .sx { color: #E6DB74 } /* Literal.String.Other */
+.codehilite .sr { color: #E6DB74 } /* Literal.String.Regex */
+.codehilite .s1 { color: #E6DB74 } /* Literal.String.Single */
+.codehilite .ss { color: #E6DB74 } /* Literal.String.Symbol */
+.codehilite .bp { color: #A6E22E } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #A6E22E } /* Name.Function.Magic */
+.codehilite .vc { color: #F8F8F2 } /* Name.Variable.Class */
+.codehilite .vg { color: #F8F8F2 } /* Name.Variable.Global */
+.codehilite .vi { color: #F8F8F2 } /* Name.Variable.Instance */
+.codehilite .vm { color: #F8F8F2 } /* Name.Variable.Magic */
+.codehilite .il { color: #AE81FF } /* Literal.Number.Integer.Long */}
+</style></head>
+<body>
+<div class="topbar"><a href="../index.html">⌂ 인덱스</a><span class="crumb">강사용 / 04-Document-Grounding</span>
+<span class="spacer"></span><button class="theme-toggle" onclick="tog()">◐ 테마</button></div>
+<div class="wrap">
+<h1 id="4-document-grounding-streaming">모듈 4 · Document Grounding + Streaming (강사용)</h1>
+<p>🎯 <strong>목표</strong>: 관리형 RAG(그라운딩)로 환각을 잡고, 모듈 1과 수미상관을 완성.
+⏱️ <strong>시간</strong>: 40분 (설명 12분 + 실습·실험 28분)
+📓 기반: <code>09-orchestration-service-grounding.ipynb</code></p>
+<hr />
+<h2 id="_1">🧑‍🏫 강사 노트 — 핸즈온의 클라이맥스</h2>
+<p>이 모듈이 서사의 정점입니다. 모듈 1에서 심은 "환각" 문제를 여기서 해결합니다. <strong>반드시 before/after를 같은 질문으로 보여주세요.</strong> 이 한 번의 비교가 참가자가 가져갈 가장 큰 깨달음입니다.</p>
+<p>핵심 메시지: <strong>"직접 벡터 DB를 안 만들어도 RAG가 된다."</strong> 모듈 2에서 임베딩·유사도를 손으로 계산했는데, 그라운딩은 그 전 과정(청킹·임베딩·검색)을 SAP가 대신해 줍니다. 그래서 코드가 필터 하나 추가하는 수준으로 짧습니다.</p>
+<h2 id="12-config">1~2. 그라운딩 config</h2>
+<p>🧑‍🏫 작동 원리를 칠판 그림처럼 설명:</p>
+<div class="codehilite"><pre><span></span><code>질문(user_query)
+   → [Grounding] help.sap.com에서 검색 → 결과를 grounding_response 로
+   → [Template] Context: {{?grounding_response}} 자리에 주입
+   → [LLM] 근거를 보고 답변
+</code></pre></div>
+
+<ul>
+<li><code>DocumentGroundingFilter(id="SAPHelp", data_repository_type="help.sap.com")</code>: SAP가 운영하는 <strong>공개 관리형 저장소</strong>. 설정 부담 0.</li>
+<li><code>DocumentGroundingPlaceholders(input=["user_query"], output="grounding_response")</code>: 어떤 변수로 검색하고, 결과를 어떤 변수로 받을지.</li>
+</ul>
+<p>💬 <strong>이렇게 말하세요</strong>: "모듈 2 기억나시죠? 질문을 임베딩해서 가까운 문서를 찾는 거. 그걸 지금 SAP가 <code>help.sap.com</code> 문서로 대신 해줍니다. 우리는 '이 저장소에서 찾아줘'라고 필터 한 줄만 쓰면 되고요."</p>
+<h2 id="3">3. 스트리밍</h2>
+<p>🧑‍🏫 <code>.run()</code> → <code>.stream()</code>, 응답은 <code>delta.content</code> 를 이어 붙임. UX 관점: 긴 답변을 기다리지 않고 토큰이 흘러나와 체감 지연↓. ChatGPT 타이핑 효과와 동일 원리.</p>
+<p>🎬 스트리밍은 라이브로 보여줄 때 효과적 — 터미널에 글자가 주르륵 나오는 걸 보여주세요.</p>
+<h2 id="_2">직접 바꿔보기 (실험) — ⭐ 수미상관 데모</h2>
+<p>🎬 <strong>반드시 할 것</strong>: 모듈 1의 환각 질문을 그대로 다시.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># 그라운딩 없이 (모듈 1 방식) vs 그라운딩 있이 (이 모듈) 같은 질문</span>
+<span class="n">q</span> <span class="o">=</span> <span class="s2">"How does the data masking of the orchestration service work?"</span>
+</code></pre></div>
+
+<p>진행:
+1. "모듈 1에서 이 질문에 모델이 그럴듯하게 답했지만 진짜인지 몰랐죠. 메모해두신 답 꺼내보세요."
+2. 그라운딩 config로 같은 질문 실행.
+3. "이번엔 SAP Help 문서를 근거로 답합니다. 두 답을 비교해 보세요 — 무엇이 달라졌나요?"</p>
+<p>💬 참가자에게 직접 말로 차이를 설명하게 하세요. "출처가 생겼다 / 구체적이다 / 더 정확하다" 같은 답이 나오면 성공.</p>
+<h2 id="_3">❓ 예상 질문 &amp; 답</h2>
+<ul>
+<li><strong>"내 회사 문서로 하려면?"</strong> → <code>data_repository_type="vector"</code> + <code>data_repositories=[내 저장소 id]</code>. 저장소는 Grounding Management(UI)로 미리 만들어 문서 수집. <strong>바로 다음 모듈 5에서 실습</strong>.</li>
+<li><strong>"그라운딩이 관련 문서를 못 찾으면?"</strong> → 엉뚱하거나 빈 context → 여전히 환각 가능. 그래서 템플릿에 "context에 없으면 모른다고 답하라"를 넣는 게 실무 팁.</li>
+<li><strong>"출처(citation)도 받을 수 있나요?"</strong> → 그라운딩 응답에 메타데이터가 포함될 수 있음. 실무에선 출처 표시가 신뢰의 핵심.</li>
+<li><strong>"help.sap.com 말고 공개 저장소 더 있나요?"</strong> → <code>data_repository_type</code> 종류는 SAP Help 문서에서 확인. 핵심은 "타입만 바꾸면 소스가 바뀐다".</li>
+</ul>
+<h2 id="_4">⚠️ 흔한 실수</h2>
+<table>
+<thead>
+<tr>
+<th>증상</th>
+<th>원인</th>
+<th>조치</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>빈/엉뚱한 답</td>
+<td>placeholder 이름 불일치</td>
+<td><code>input</code>/<code>output</code> 이름과 템플릿 <code>{{?...}}</code> 일치 확인</td>
+</tr>
+<tr>
+<td>grounding 무시됨</td>
+<td><code>grounding=grounding_config</code> 누락</td>
+<td><code>ModuleConfig</code> 에 포함했는지</td>
+</tr>
+<tr>
+<td>스트리밍 안 나옴</td>
+<td><code>stream</code> 옵션 누락</td>
+<td><code>GlobalStreamOptions(enabled=True)</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="_5">⏭️ 전환 멘트</h2>
+<blockquote>
+<p>"그라운딩이 환각을 어떻게 잡는지 봤습니다. 그런데 방금은 <strong>공개 SAP Help</strong> 문서였죠. 다음 모듈에서는 <strong>우리 문서</strong>로 똑같이 해봅니다. 놀랍게도 바뀌는 건 필터 한 줄이에요 — <code>help.sap.com</code> 이 우리 저장소로. 소스 교체가 얼마나 쉬운지 보게 됩니다."</p>
+</blockquote>
+</div>
+<script>
+function tog(){var r=document.documentElement;var c=r.getAttribute('data-theme');
+var n=c==='dark'?'light':(c==='light'?'':'dark');r.setAttribute('data-theme',n);
+try{localStorage.setItem('codejam-theme',n)}catch(e){}}
+try{var s=localStorage.getItem('codejam-theme');if(s)document.documentElement.setAttribute('data-theme',s)}catch(e){}
+</script>
+</body></html>
