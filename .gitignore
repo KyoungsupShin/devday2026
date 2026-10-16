@@ -13,6 +13,7 @@ service*key*.json
 __pycache__/
 **/__pycache__/
 *.pyc
+**/.ipynb_checkpoints/
 
 # === 실행/검증 산출물 ===
 validation_results.json

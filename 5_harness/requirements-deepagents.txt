@@ -1,0 +1,4 @@
+# 05번 선택 심화에서만 설치합니다.
+-r requirements.txt
+deepagents>=0.7,<1
+langchain-openai>=1.4,<2

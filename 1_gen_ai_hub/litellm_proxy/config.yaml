@@ -1,0 +1,21 @@
+model_list:
+  - model_name: gemini-2.5-flash
+    litellm_params:
+      model: sap/gemini-2.5-flash
+      drop_params: true
+      additional_drop_params:
+        - "client_metadata"
+
+  - model_name: gpt-5.6-terra
+    litellm_params:
+      model: sap/gpt-5.6-terra
+      drop_params: true
+      additional_drop_params:
+        - "client_metadata"
+
+  - model_name: gpt-5.6-luna
+    litellm_params:
+      model: sap/gpt-5.6-luna
+      drop_params: true
+      additional_drop_params:
+        - "client_metadata"

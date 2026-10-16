@@ -1,0 +1,21 @@
+{
+  "source": "sap-app-in-app HANA SAP_HARNESS_PROMPTS",
+  "exportedAt": "2026-10-15T00:00:00+09:00",
+  "prompts": [
+    {
+      "id": "rerank.specialist_dispatch.app-agent",
+      "updatedAt": "2026-10-06T13:53:39.160171+00:00",
+      "content": "등록 앱의 고유 화면·workflow·레코드 작업\nDOC OCR 업로드/OCR 결과, SCRUM 요청·보드, 3PL EAI 연계·배송·입출고 기록\n→ App Agent"
+    },
+    {
+      "id": "rerank.specialist_dispatch.business-agent",
+      "updatedAt": "2026-10-06T13:52:49.404045+00:00",
+      "content": "내부 ERP·SCM Business Data Mart·EAI 실제 운영 데이터의 읽기 전용 조회·검증\nSales Order·PO·재고·ATP·납기·생산·출하의 구체적 수량·상태·일정·식별값 확인\n→ Business Agent"
+    },
+    {
+      "id": "rerank.specialist_dispatch.researcher",
+      "updatedAt": "2026-10-06T13:53:33.455254+00:00",
+      "content": "일반 지식 기반 분석·비교·설명·요약\n웹·사내 데이터·MCP 조회 없이 모델 지식·사용자 맥락으로 답변\n기업·산업·제품·기술·경쟁사 비교, 전략·시사점 정리\n→ Researcher"
+    }
+  ]
+}

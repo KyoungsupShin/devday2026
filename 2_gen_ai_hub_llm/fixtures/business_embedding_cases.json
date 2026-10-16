@@ -1,0 +1,14 @@
+[
+  {"id": "PAY-001", "label": "payment", "text": "고객 카드 결제가 두 번 승인되어 중복 청구 환불을 요청합니다."},
+  {"id": "PAY-002", "label": "payment", "text": "세금계산서 금액과 결제 금액이 달라 정산 확인이 필요합니다."},
+  {"id": "PAY-003", "label": "payment", "text": "자동이체 출금이 실패해 미납금 납부 방법을 문의합니다."},
+  {"id": "LOG-001", "label": "logistics", "text": "주문한 상품의 배송이 예정일보다 이틀 지연되고 있습니다."},
+  {"id": "LOG-002", "label": "logistics", "text": "배송된 상자에 주문 상품 일부가 누락되어 재출고를 요청합니다."},
+  {"id": "LOG-003", "label": "logistics", "text": "운송장에는 배달 완료지만 고객은 상품을 받지 못했다고 합니다."},
+  {"id": "CMP-001", "label": "compliance", "text": "법인 고객의 사업자등록증이 만료되어 KYC 서류 갱신이 필요합니다."},
+  {"id": "CMP-002", "label": "compliance", "text": "고객 신분증 정보와 계정 정보가 불일치하여 본인 확인을 요청합니다."},
+  {"id": "CMP-003", "label": "compliance", "text": "제재 목록 일치 가능성이 있어 거래 보류 여부를 검토해야 합니다."},
+  {"id": "TEC-001", "label": "technical", "text": "모바일 앱 로그인 뒤 흰 화면이 표시되어 주문 내역을 볼 수 없습니다."},
+  {"id": "TEC-002", "label": "technical", "text": "API 호출이 500 오류를 반환하고 주문 생성이 실패합니다."},
+  {"id": "TEC-003", "label": "technical", "text": "비밀번호 재설정 이메일을 받지 못해 계정에 접속할 수 없습니다."}
+]

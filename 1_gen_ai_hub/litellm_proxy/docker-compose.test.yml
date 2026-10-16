@@ -1,0 +1,42 @@
+name: genaihub-litellm-test
+
+services:
+  litellm:
+    image: ghcr.io/berriai/litellm@sha256:8386035f69266617cb88f35380a78e81a66e047a52821c73713666247ff2aba0
+    ports:
+      - "4001:4000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./patch_litellm.sh:/app/patch_litellm.sh:ro
+    environment:
+      DATABASE_URL: postgresql://litellm_user:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/litellm_db
+      LITELLM_DROP_PARAMS: "True"
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env}
+      DISABLE_ADMIN_UI: "False"
+      AICORE_CLIENT_ID: ${AICORE_CLIENT_ID:?set AICORE_CLIENT_ID in .env}
+      AICORE_CLIENT_SECRET: ${AICORE_CLIENT_SECRET:?set AICORE_CLIENT_SECRET in .env}
+      AICORE_AUTH_URL: ${AICORE_AUTH_URL:?set AICORE_AUTH_URL in .env}
+      AICORE_BASE_URL: ${AICORE_BASE_URL:?set AICORE_BASE_URL in .env}
+      AICORE_RESOURCE_GROUP: ${AICORE_RESOURCE_GROUP:-default}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - /app/patch_litellm.sh && exec /app/docker/prod_entrypoint.sh "$@"
+      - litellm-entrypoint
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: litellm_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: litellm_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

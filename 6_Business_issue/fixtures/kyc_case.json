@@ -1,0 +1,29 @@
+{
+  "case_id": "kyc-corporate-review-001",
+  "request": "신규 법인 고객의 KYC 증빙과 제재·PEP 스크리닝 결과를 검토하고, 계정 개설 가능 여부와 후속 조치를 제안해줘.",
+  "customer": {
+    "customer_id": "DEMO-C-1042",
+    "legal_name": "데모에너지솔루션 주식회사",
+    "customer_type": "corporate",
+    "country_risk": "standard"
+  },
+  "sources": {
+    "crm": "CRM onboarding record, 2026-10-15 10:30 KST",
+    "registry": "Corporate registry verification snapshot",
+    "screening": "Sanctions and PEP screening snapshot",
+    "policy": "KYC policy v2.4"
+  },
+  "verification": {
+    "corporate_registration_verified": true,
+    "representative_identity_verified": true,
+    "ultimate_beneficial_owner_verified": false,
+    "sanctions_screening": "clear",
+    "pep_screening": "possible_match",
+    "adverse_media": "no_material_match"
+  },
+  "policy": {
+    "confirmed_sanctions_match": "block",
+    "unverified_ubo": "enhanced_due_diligence",
+    "possible_pep_match": "enhanced_due_diligence"
+  }
+}

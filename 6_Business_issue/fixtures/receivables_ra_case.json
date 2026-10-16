@@ -1,0 +1,30 @@
+{
+  "case_id": "receivables-ra-001",
+  "request": "고객사 채권 잔액과 연체 현황을 기준으로 신규 주문의 신용 리스크를 평가하고 출고 조건을 제안해줘.",
+  "customer": {
+    "customer_id": "DEMO-C-2048",
+    "legal_name": "데모모빌리티 주식회사"
+  },
+  "sources": {
+    "ar_ledger": "Accounts receivable ledger, 2026-10-15 11:00 KST",
+    "sales_order": "Open sales order snapshot",
+    "credit_policy": "Credit policy v4.1"
+  },
+  "credit": {
+    "credit_limit_krw": 80000000,
+    "current_exposure_krw": 75000000,
+    "requested_order_krw": 18000000
+  },
+  "aging_krw": {
+    "current": 53000000,
+    "days_1_30": 10000000,
+    "days_31_60": 8000000,
+    "days_61_90": 4000000,
+    "over_90": 0
+  },
+  "policy": {
+    "max_standard_overdue_ratio": 0.2,
+    "over_90_action": "shipment_hold",
+    "over_limit_action": "conditional_release"
+  }
+}

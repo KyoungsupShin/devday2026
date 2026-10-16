@@ -1,0 +1,10 @@
+{
+  "name": "capstone-harness-mock-registry",
+  "mode": "local-only",
+  "tools": [
+    {"name": "get_inventory", "description": "현재 재고와 재주문 필요 여부를 조회한다.", "write": false},
+    {"name": "search_policy", "description": "로컬 정책 문서에서 관련 근거를 검색한다.", "write": false},
+    {"name": "draft_reorder", "description": "발주 초안을 만들거나 승인된 경우 실행한다.", "write": true, "approval_required": true}
+  ]
+}
+
