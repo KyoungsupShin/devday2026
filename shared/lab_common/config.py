@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,9 +21,39 @@ except ImportError:  # Allows the local-only workflow/tests to run before pip in
         return True
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_LLM_MODEL = "gpt-5.6-luna"
+DEFAULT_LLM_SEED = 20261018
 
 
-def load_settings(env_file: Path | None = None) -> "Settings":
+def _llm_seed_from_environment() -> int:
+    """Read one stable generation seed shared by every native LLM call."""
+    raw = os.getenv("LLM_SEED", str(DEFAULT_LLM_SEED)).strip()
+    try:
+        return int(raw)
+    except ValueError as error:
+        raise ValueError("LLM_SEED는 정수여야 합니다.") from error
+
+
+def save_grounding_repository_id(repository_id: str, env_file: Path | None = None) -> Path:
+    """Persist the selected vector repository for the next notebook session."""
+    cleaned_id = repository_id.strip()
+    if not cleaned_id or "\n" in cleaned_id or "\r" in cleaned_id:
+        raise ValueError("유효한 Grounding Repository ID를 입력하세요.")
+
+    target = env_file or REPOSITORY_ROOT / ".env"
+    existing = target.read_text(encoding="utf-8") if target.exists() else ""
+    assignment = f"GROUNDING_REPOSITORY_ID={cleaned_id}"
+    pattern = r"(?m)^GROUNDING_REPOSITORY_ID=.*$"
+    if re.search(pattern, existing):
+        updated = re.sub(pattern, assignment, existing)
+    else:
+        separator = "" if not existing or existing.endswith("\n") else "\n"
+        updated = f"{existing}{separator}{assignment}\n"
+    target.write_text(updated, encoding="utf-8")
+    return target
+
+
+def load_settings(env_file: Path | None = None) -> Settings:
     """Load the repository-level .env without overriding shell variables."""
     selected_env = env_file or REPOSITORY_ROOT / ".env"
     load_dotenv(selected_env, override=False)
@@ -32,11 +63,13 @@ def load_settings(env_file: Path | None = None) -> "Settings":
         client_id=os.getenv("AICORE_CLIENT_ID", ""),
         client_secret=os.getenv("AICORE_CLIENT_SECRET", ""),
         resource_group=os.getenv("AICORE_RESOURCE_GROUP", "default"),
-        llm_model=os.getenv("LLM_MODEL", "gpt-5.6-luna"),
+        llm_model=os.getenv("LLM_MODEL", DEFAULT_LLM_MODEL),
         rerank_endpoint=os.getenv("RERANK_ENDPOINT", "").rstrip("/"),
         rerank_api_key=os.getenv("RERANK_API_KEY", ""),
         rerank_model=os.getenv("RERANK_MODEL", "cohere-rerank-pro"),
         allow_write_tools=os.getenv("ALLOW_WRITE_TOOLS", "false").lower() == "true",
+        llm_seed=_llm_seed_from_environment(),
+        llm_deployment_id=os.getenv("AICORE_LLM_DEPLOYMENT_ID", "").strip(),
     )
 
 
@@ -52,6 +85,8 @@ class Settings:
     rerank_api_key: str
     rerank_model: str
     allow_write_tools: bool
+    llm_seed: int = DEFAULT_LLM_SEED
+    llm_deployment_id: str = ""
 
     def missing_ai_core_fields(self) -> list[str]:
         values = {

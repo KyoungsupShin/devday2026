@@ -64,7 +64,7 @@ python3 -m jupyterlab
   - [02_embeddings.ipynb](2_gen_ai_hub_llm/notebooks/02_embeddings.ipynb) — 벡터와 cosine similarity
   - [03_reranker_decision_model.ipynb](2_gen_ai_hub_llm/notebooks/03_reranker_decision_model.ipynb) — 정책 후보 reranking, margin, 사람 검토 게이트
   - [04_business_embedding_cluster.ipynb](2_gen_ai_hub_llm/notebooks/04_business_embedding_cluster.ipynb) — 업무 문의 clustering과 label-aware embedding adapter
-- 산출물: `src/decision_model.py`, `src/business_embeddings.py`의 재사용 가능한 추천·임베딩 도구
+- 산출물: `src/reranker/lab_core.py`, `src/business_embeddings.py`의 재사용 가능한 추천·임베딩 도구
 - 주의: 예제의 승인/반려는 상태를 바꾸지 않는 추천이며, 불확실한 사례는 `manual-review`로 처리합니다.
 
 ### 3. [Gen AI Hub Services](3_gen_ai_hub_services/)
@@ -84,7 +84,7 @@ python3 -m jupyterlab
   - [01_agent_workflow.ipynb](4_agent_patterns/notebooks/01_agent_workflow.ipynb) — 코드가 전이를 고정한 workflow와 router 분기
   - [02_agent_loop_mcp.ipynb](4_agent_patterns/notebooks/02_agent_loop_mcp.ipynb) — 관찰·도구 호출·재관찰과 승인 게이트
   - [03_agent_to_agent.ipynb](4_agent_patterns/notebooks/03_agent_to_agent.ipynb) — researcher → analyst handoff artifact
-- 구성: `src/`에는 framework-independent routing·workflow·loop 구현이, `demo_app/`에는 캡스톤 웹/API 예제가 있습니다.
+- 구성: `src/`에는 노트북별 workflow·agent loop·A2A core와 UI 어댑터가 있습니다.
 - 안전성: 기본 mock 도구는 외부 시스템을 변경하지 않습니다.
 
 ### 5. [Harness](5_harness/)

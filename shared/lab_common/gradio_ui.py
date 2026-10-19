@@ -6,6 +6,7 @@ explicitly calls ``launch(inline=True)`` when the learner is ready.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, Callable
 
@@ -140,17 +141,33 @@ def _history_messages(history: list[Any] | None) -> list[dict[str, str]]:
     return messages
 
 
-def build_chat_ui(chat_runner: Callable[..., dict[str, str]]):
-    """Create a compact chat UI; prompt/model controls live in an overlay."""
+def build_chat_ui(
+    chat_runner: Callable[..., dict[str, str]],
+    chat_stream_runner: Callable[..., Iterator[str]] | None = None,
+):
+    """Create a compact chat UI, streaming tokens when a streamer is provided."""
     gr = _gradio()
 
-    def reply(message: str, history: list[Any], chat_config: dict[str, str]) -> str:
+    def reply(message: str, history: list[Any], chat_config: dict[str, str]) -> Iterator[str]:
         if not message.strip():
-            return "질문을 입력하세요."
+            yield "질문을 입력하세요."
+            return
         settings = load_settings()
         selected_model = chat_config.get("model_name", "").strip() or settings.llm_model
         system_prompt = chat_config.get("system_prompt", "")
         try:
+            if chat_stream_runner is not None:
+                accumulated = ""
+                for delta in chat_stream_runner(
+                    message=message,
+                    settings=settings,
+                    history=_history_messages(history),
+                    system_prompt=system_prompt,
+                    model=selected_model,
+                ):
+                    accumulated += delta
+                    yield accumulated
+                return
             outcome = chat_runner(
                 message=message,
                 settings=settings,
@@ -158,9 +175,9 @@ def build_chat_ui(chat_runner: Callable[..., dict[str, str]]):
                 system_prompt=system_prompt,
                 model=selected_model,
             )
-            return outcome["reply"]
+            yield outcome["reply"]
         except Exception as error:
-            return f"호출 실패: {type(error).__name__}: {error}"
+            yield f"호출 실패: {type(error).__name__}: {error}"
 
     settings = load_settings()
     modal_css = """

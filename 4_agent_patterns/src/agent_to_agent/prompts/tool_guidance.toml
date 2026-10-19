@@ -1,0 +1,3 @@
+[tools.calculate_profitability_scenarios]
+guidance = '''When a profitability-calculation observation is available, use its COGS, BEP, monthly forecast, and scenario comparison as one scoped calculation record. Do not recreate it with an unstated conversion, price, tax, demand, or volume assumption. Compare only the returned scenarios and months, distinguish a scenario from an observed operating result, and preserve the local-snapshot source boundary. The calculation does not establish a budget decision, Cost Center ownership, transfer readiness, approval, or external action.'''
+

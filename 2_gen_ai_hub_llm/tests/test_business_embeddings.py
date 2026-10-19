@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "shared"))
 sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
-from src.business_embeddings import BusinessEmbeddingAdapter, kmeans_cluster
+from src.business_embedding.lab_core import BusinessEmbeddingAdapter, kmeans_cluster
 
 
 class BusinessEmbeddingTests(unittest.TestCase):
@@ -24,7 +24,9 @@ class BusinessEmbeddingTests(unittest.TestCase):
 
     def test_adapter_predicts_held_out_business_label(self):
         vectors = np.array([[1.0, 0.0], [0.9, 0.1], [0.0, 1.0], [0.1, 0.9]])
-        adapter = BusinessEmbeddingAdapter().fit(vectors, ["payment", "payment", "logistics", "logistics"])
+        adapter = BusinessEmbeddingAdapter().fit(
+            vectors, ["payment", "payment", "logistics", "logistics"]
+        )
         self.assertEqual(adapter.predict([[0.8, 0.2]]), ["payment"])
         self.assertEqual(adapter.predict([[0.2, 0.8]]), ["logistics"])
 

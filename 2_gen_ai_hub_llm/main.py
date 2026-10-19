@@ -10,10 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "shared"), str(Path(__file__).resolve().parent)]
 
 from lab_common.config import load_settings
-from src.decision_model import run_decision_recommendation
-from src.lab_core import (
-    compare_embeddings, compare_prompts, load_business_cases, run_business_embedding_lab, run_chat,
-)
+from src.reranker.lab_core import run_decision_recommendation
+from src.prompt_model.lab_core import compare_prompts, run_chat
+from src.embeddings.lab_core import compare_embeddings
+from src.business_embedding.lab_core import load_business_cases, run_business_embedding_lab
 
 
 def main() -> None:

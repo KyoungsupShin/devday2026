@@ -1,4 +1,6 @@
-sap-ai-sdk-gen==5.11.0
+sap-ai-sdk-gen>=7.4.1,<8
+sap-ai-sdk-core>=3.5,<4
+google-cloud-aiplatform==1.113.0
 openai>=1.0,<3
 requests>=2.32,<3
 python-dotenv>=1.0,<2
@@ -9,4 +11,6 @@ numpy>=1.26,<3
 scipy>=1.14,<2
 gradio>=5,<6
 mistune>=3,<4
+a2a-sdk[fastapi]>=1.2,<2
+hdbcli>=2.30,<3
 

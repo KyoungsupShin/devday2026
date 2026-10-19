@@ -12,14 +12,12 @@ sys.path.insert(0, str(ROOT / "shared"))
 sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
 from lab_common.config import Settings
-from src.lab_core import (
-    compare_prompts,
-    compare_embeddings,
-    cosine_similarity,
+from src.prompt_model.lab_core import compare_prompts, run_chat, run_chat_stream
+from src.embeddings.lab_core import compare_embeddings, cosine_similarity
+from src.business_embedding.lab_core import (
     holdout_indices_by_label,
     recommend_business_queue,
     run_business_embedding_lab,
-    run_chat,
     run_business_embedding_workflow,
 )
 
@@ -36,7 +34,9 @@ class LabCoreTests(unittest.TestCase):
             calls.append((messages, model))
             return "baseline answer" if len(messages) == 1 else "constrained answer"
 
-        outcome = compare_prompts("  LLM이 무엇인가요?  ", settings(), chat_caller=fake_chat)
+        outcome = compare_prompts(
+            "  LLM이 무엇인가요?  ", settings(), chat_caller=fake_chat
+        )
 
         self.assertEqual(
             outcome,
@@ -46,7 +46,9 @@ class LabCoreTests(unittest.TestCase):
                 "constrained": "constrained answer",
             },
         )
-        self.assertEqual(calls[0][0], [{"role": "user", "content": "LLM이 무엇인가요?"}])
+        self.assertEqual(
+            calls[0][0], [{"role": "user", "content": "LLM이 무엇인가요?"}]
+        )
         self.assertEqual(calls[1][0][0]["role"], "system")
         self.assertEqual(calls[1][0][1]["role"], "user")
         self.assertIsNone(calls[0][1])
@@ -54,7 +56,11 @@ class LabCoreTests(unittest.TestCase):
 
     def test_compare_prompts_rejects_blank_question_without_calling_sdk(self):
         with self.assertRaisesRegex(ValueError, "질문을 입력하세요"):
-            compare_prompts("   ", settings(), chat_caller=lambda *_: self.fail("SDK should not be called"))
+            compare_prompts(
+                "   ",
+                settings(),
+                chat_caller=lambda *_: self.fail("SDK should not be called"),
+            )
 
     def test_run_chat_builds_history_in_core_and_returns_json_friendly_result(self):
         calls: list[tuple[list[dict[str, str]], str | None]] = []
@@ -75,23 +81,72 @@ class LabCoreTests(unittest.TestCase):
             chat_caller=fake_chat,
         )
 
-        self.assertEqual(outcome, {"message": "다음 질문입니다.", "model": "chat-model", "reply": "안녕하세요."})
+        self.assertEqual(
+            outcome,
+            {
+                "message": "다음 질문입니다.",
+                "model": "chat-model",
+                "reply": "안녕하세요.",
+            },
+        )
         self.assertEqual(
             calls,
-            [([
-                {"role": "system", "content": "한국어로 답해."},
-                {"role": "user", "content": "이전 질문"},
-                {"role": "assistant", "content": "이전 답변"},
-                {"role": "user", "content": "다음 질문입니다."},
-            ], "chat-model")],
+            [
+                (
+                    [
+                        {"role": "system", "content": "한국어로 답해."},
+                        {"role": "user", "content": "이전 질문"},
+                        {"role": "assistant", "content": "이전 답변"},
+                        {"role": "user", "content": "다음 질문입니다."},
+                    ],
+                    "chat-model",
+                )
+            ],
         )
         json.dumps(outcome)
 
-    def test_run_chat_rejects_blank_message_and_invalid_history_without_calling_sdk(self):
+    def test_run_chat_rejects_blank_message_and_invalid_history_without_calling_sdk(
+        self,
+    ):
         with self.assertRaisesRegex(ValueError, "질문을 입력하세요"):
-            run_chat(" ", settings(), chat_caller=lambda *_: self.fail("SDK should not be called"))
+            run_chat(
+                " ",
+                settings(),
+                chat_caller=lambda *_: self.fail("SDK should not be called"),
+            )
         with self.assertRaisesRegex(ValueError, "history"):
-            run_chat("질문", settings(), history=[{"role": "system", "content": "bad"}], chat_caller=lambda *_: self.fail("SDK should not be called"))
+            run_chat(
+                "질문",
+                settings(),
+                history=[{"role": "system", "content": "bad"}],
+                chat_caller=lambda *_: self.fail("SDK should not be called"),
+            )
+
+    def test_run_chat_stream_yields_deltas_and_bounds_history(self):
+        calls: list[tuple[list[dict[str, str]], str | None]] = []
+
+        def fake_stream(_settings, messages, model):
+            calls.append((messages, model))
+            yield "안녕"
+            yield "하세요"
+
+        history = [{"role": "user", "content": str(index)} for index in range(15)]
+        reply = list(
+            run_chat_stream(
+                "질문",
+                settings(),
+                history=history,
+                model="chat-model",
+                chat_stream_caller=fake_stream,
+            )
+        )
+
+        self.assertEqual(reply, ["안녕", "하세요"])
+        self.assertEqual(calls[0][1], "chat-model")
+        self.assertEqual(
+            [item["content"] for item in calls[0][0]],
+            [str(index) for index in range(3, 15)] + ["질문"],
+        )
 
     def test_cosine_similarity_rejects_zero_vector(self):
         self.assertAlmostEqual(cosine_similarity([1, 0], [0, 1]), 0.0)
@@ -130,28 +185,45 @@ class LabCoreTests(unittest.TestCase):
 
     def test_compare_embeddings_rejects_malformed_embedder_result(self):
         with self.assertRaisesRegex(ValueError, "2D vector"):
-            compare_embeddings(["one", "two"], settings(), embedder=lambda *_: np.asarray([1, 2]))
+            compare_embeddings(
+                ["one", "two"], settings(), embedder=lambda *_: np.asarray([1, 2])
+            )
         with self.assertRaisesRegex(ValueError, "결과 수"):
-            compare_embeddings(["one", "two"], settings(), embedder=lambda *_: np.asarray([[1, 0]]))
+            compare_embeddings(
+                ["one", "two"], settings(), embedder=lambda *_: np.asarray([[1, 0]])
+            )
 
     def test_workflow_keeps_one_holdout_per_label(self):
         cases = [
-            {"id": "a1", "text": "a", "label": "payment"}, {"id": "a2", "text": "aa", "label": "payment"},
-            {"id": "b1", "text": "b", "label": "logistics"}, {"id": "b2", "text": "bb", "label": "logistics"},
+            {"id": "a1", "text": "a", "label": "payment"},
+            {"id": "a2", "text": "aa", "label": "payment"},
+            {"id": "b1", "text": "b", "label": "logistics"},
+            {"id": "b2", "text": "bb", "label": "logistics"},
         ]
         vectors = np.asarray([[1, 0], [0.9, 0.1], [0, 1], [0.1, 0.9]], dtype=float)
-        self.assertEqual(holdout_indices_by_label([case["label"] for case in cases]).tolist(), [3, 1])
+        self.assertEqual(
+            holdout_indices_by_label([case["label"] for case in cases]).tolist(), [3, 1]
+        )
         outcome = run_business_embedding_workflow(cases, vectors, n_clusters=2)
         self.assertEqual(set(outcome["holdout_ids"]), {"a2", "b2"})
         self.assertGreaterEqual(outcome["holdout_accuracy"], 0.0)
 
     def test_queue_recommendation_accepts_injected_embedder(self):
         cases = [
-            {"id": "a1", "text": "a", "label": "payment"}, {"id": "a2", "text": "aa", "label": "payment"},
-            {"id": "b1", "text": "b", "label": "logistics"}, {"id": "b2", "text": "bb", "label": "logistics"},
+            {"id": "a1", "text": "a", "label": "payment"},
+            {"id": "a2", "text": "aa", "label": "payment"},
+            {"id": "b1", "text": "b", "label": "logistics"},
+            {"id": "b2", "text": "bb", "label": "logistics"},
         ]
-        outcome = run_business_embedding_workflow(cases, [[1, 0], [0.9, 0.1], [0, 1], [0.1, 0.9]], n_clusters=2)
-        result = recommend_business_queue("new payment", outcome["adapter"], settings(), embedder=lambda *_: np.asarray([[1, 0]]))
+        outcome = run_business_embedding_workflow(
+            cases, [[1, 0], [0.9, 0.1], [0, 1], [0.1, 0.9]], n_clusters=2
+        )
+        result = recommend_business_queue(
+            "new payment",
+            outcome["adapter"],
+            settings(),
+            embedder=lambda *_: np.asarray([[1, 0]]),
+        )
         self.assertEqual(result["recommended_queue"], "payment")
 
     def test_business_embedding_lab_returns_json_from_one_embedding_batch(self):
@@ -165,7 +237,9 @@ class LabCoreTests(unittest.TestCase):
 
         def fake_embedder(texts, _settings, model):
             calls.append((list(texts), model))
-            return np.asarray([[1, 0], [0.9, 0.1], [0, 1], [0.1, 0.9], [0.8, 0.2]], dtype=float)
+            return np.asarray(
+                [[1, 0], [0.9, 0.1], [0, 1], [0.1, 0.9], [0.8, 0.2]], dtype=float
+            )
 
         outcome = run_business_embedding_lab(
             "  새 결제 문의  ",
@@ -176,7 +250,21 @@ class LabCoreTests(unittest.TestCase):
             embedder=fake_embedder,
         )
 
-        self.assertEqual(calls, [(["payment one", "payment two", "logistics one", "logistics two", "새 결제 문의"], "embedding-test")])
+        self.assertEqual(
+            calls,
+            [
+                (
+                    [
+                        "payment one",
+                        "payment two",
+                        "logistics one",
+                        "logistics two",
+                        "새 결제 문의",
+                    ],
+                    "embedding-test",
+                )
+            ],
+        )
         self.assertEqual(outcome["model"], "embedding-test")
         self.assertEqual(outcome["embedding_dimensions"], 2)
         self.assertEqual(len(outcome["clusters"]), 4)
@@ -193,7 +281,9 @@ class LabCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "비어 있습니다"):
             run_business_embedding_lab("ticket", [], settings(), embedder=no_call)
         with self.assertRaisesRegex(ValueError, "id, text, label"):
-            run_business_embedding_lab("ticket", [{"id": "a", "text": "case"}], settings(), embedder=no_call)
+            run_business_embedding_lab(
+                "ticket", [{"id": "a", "text": "case"}], settings(), embedder=no_call
+            )
 
 
 if __name__ == "__main__":

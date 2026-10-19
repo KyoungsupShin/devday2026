@@ -1,0 +1,37 @@
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e7]:
+      - heading "F&B LLM Orchestration · A2A" [level=2] [ref=e12]
+      - heading "A2A 단체 대화" [level=3] [ref=e17]
+      - generic [ref=e18]:
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]: F&B Launch A2A 단체방
+            - generic [ref=e25]: 요청 부서 · 협업 Team · Orchestration
+          - generic [ref=e26]: A2A 단체 대화가 시작되면 handoff와 artifact 요약이 이곳에 표시됩니다.
+        - generic [ref=e29]:
+          - generic: Textbox
+          - textbox "Textbox" [ref=e31]:
+            - /placeholder: 업무 요청을 입력하고 Enter를 누르세요. (읽기 전용 A2A 검토)
+            - text: 다음 달 프로모션 물량을 맞추기 위해 현재 판매 중인 기존 제품의 추가 구매를 요청합니다. 납기와 필요한 내부 검토 사항을 확인해 주세요.
+      - button "A2A 카드 정보 보기" [ref=e32] [cursor=pointer]
+      - button "교육용 시나리오 예시 ▼" [ref=e36] [cursor=pointer]:
+        - generic [ref=e37]: 교육용 시나리오 예시
+        - generic [ref=e38]: ▼
+      - button "실행 흐름 및 상세 정보 ▼" [ref=e40] [cursor=pointer]:
+        - generic [ref=e41]: 실행 흐름 및 상세 정보
+        - generic [ref=e42]: ▼
+    - generic [ref=e43]:
+      - button [ref=e44] [cursor=pointer]:
+        - text: API를 통해 사용
+        - img "로고" [ref=e45]
+      - generic [ref=e46]: ·
+      - link [ref=e47] [cursor=pointer]:
+        - /url: https://gradio.app
+        - text: Gradio로 제작됨
+        - img "로고" [ref=e48]
+      - generic [ref=e49]: ·
+      - button [ref=e50] [cursor=pointer]:
+        - text: 설정
+        - img "설정" [ref=e51]
+      - iframe [aria-hidden] [ref=e52]

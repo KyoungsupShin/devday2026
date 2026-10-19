@@ -19,6 +19,7 @@ __pycache__/
 validation_results.json
 results/
 **/results/
+4_agent_patterns/artifacts/debug/
 
 # === OS/에디터 ===
 .DS_Store
