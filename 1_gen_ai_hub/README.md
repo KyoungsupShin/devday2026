@@ -1,60 +1,55 @@
-# 1. Gen AI Hub와 BTP AI Core
+# 01 · Gen AI Hub와 BTP AI Core
 
-AI Core service key를 로컬 `.env`에 연결하고, SDK가 사용할 인증 정보와 실행 중인 deployment를 안전하게 확인합니다. 이 단계가 이후 LLM·서비스·Agent 실습의 공통 환경입니다.
+AI Core service key를 로컬 환경에 연결하고, 이후 실습에서 사용할 인증·deployment·LLM 호출 경로를 안전하게 확인하는 출발 단계입니다.
 
-## 시작 전 준비
+> 설치, 환경 파일 생성, JupyterLab 실행은 [루트 README](../README.md)에서 한 번만 진행하세요. 이 문서는 노트북에서 무엇을 확인하는지에 집중합니다.
 
-공통 설치와 `.env` 생성은 [루트 README](../README.md#사전-준비와-설치)를 먼저 따르세요. 설치가 아직이면 저장소 루트에서 운영체제에 맞는 한 줄을 실행합니다.
+---
 
-**macOS/Linux**
+<details>
+<summary><strong>🔧 시작 전 확인</strong></summary>
 
-```bash
-python3 -m venv .venv && .venv/bin/python -m pip install --upgrade pip -r requirements.txt
-```
+| 확인 항목 | 내용 |
+| --- | --- |
+| AI Core 연결 | 루트 `.env`에 AI Core 인증 정보와 `LLM_MODEL`이 준비되어 있어야 합니다. |
+| 비밀정보 보호 | service key와 API key는 출력·노트북 결과·Git에 남기지 않습니다. |
+| 실행 환경 | 실습은 루트에서 준비한 Python 가상환경과 JupyterLab을 함께 사용합니다. |
 
-**Windows PowerShell**
+</details>
 
-```powershell
-py -m venv .venv && .\.venv\Scripts\python.exe -m pip install --upgrade pip -r requirements.txt
-```
+---
 
-루트 `.env`에 `AICORE_BASE_URL`, `AICORE_AUTH_URL`, `AICORE_CLIENT_ID`, `AICORE_CLIENT_SECRET`, `AICORE_RESOURCE_GROUP`, `LLM_MODEL`을 설정합니다. 실제 비밀값을 출력하거나 Git에 커밋하지 마세요.
+<details>
+<summary><strong>📓 노트북 안내</strong></summary>
 
-## 실습 순서
+| 노트북 | 무엇을 하나요? | 확인할 결과 |
+| --- | --- | --- |
+| [00_learning_roadmap.ipynb](notebooks/00_learning_roadmap.ipynb) | 전체 01~04 학습 흐름과 각 단계의 역할을 소개합니다. | 모델 연결부터 Agent 협업까지의 선후 관계를 설명할 수 있습니다. |
+| [00_environment.ipynb](notebooks/00_environment.ipynb) | 설정 누락 여부를 점검하고, 실행 가능한 AI Core deployment를 조회합니다. | 비밀값 없이 인증 준비 상태와 RUNNING deployment 상태를 확인합니다. |
+| [01_openai_compatible_chat.ipynb](notebooks/01_openai_compatible_chat.ipynb) | AI Core의 LLM을 OpenAI-compatible 방식으로 호출합니다. | 모델명·입력 메시지·응답의 관계를 확인하고 기본 채팅 호출을 성공시킵니다. |
 
-1. [notebooks/00_learning_roadmap.ipynb](notebooks/00_learning_roadmap.ipynb)에서 전체 1~4단계 학습 흐름과 사전 준비를 확인합니다.
-2. [notebooks/00_environment.ipynb](notebooks/00_environment.ipynb)에서 설정 누락 여부와 RUNNING deployment를 확인합니다.
-3. [notebooks/01_openai_compatible_chat.ipynb](notebooks/01_openai_compatible_chat.ipynb)에서 AI Core LLM 호출을 확인합니다.
-4. 필요할 때만 LiteLLM Proxy를 OpenAI SDK 문법으로 호출합니다.
+노트북은 위 순서대로 실행하세요. 환경 상태가 준비되지 않은 경우에는 호출을 계속 진행하기보다 설정을 먼저 보완합니다.
 
-CLI로 노트북 시작 전 환경을 점검할 수 있습니다.
+</details>
 
-```bash
-.venv/bin/python 1_gen_ai_hub/main.py status
-.venv/bin/python 1_gen_ai_hub/main.py deployments
-```
+---
 
-성공 기준은 비밀값 없이 환경 상태를 확인하고, AI Core 인증이 준비된 경우 RUNNING 모델 또는 orchestration deployment를 조회하는 것입니다.
+<details>
+<summary><strong>🧩 선택 기능: LiteLLM Proxy</strong></summary>
 
-## 선택: LiteLLM Proxy
+OpenAI SDK 형식의 별도 endpoint를 사용해야 할 때만 LiteLLM Proxy를 연결합니다. 이 기능은 기본 AI Core 실습에 필수는 아니며, Proxy 주소·API key·모델명이 준비된 경우에만 상태와 채팅 호출을 확인합니다.
 
-루트 `.env`에 아래 값을 설정하면 OpenAI-compatible endpoint를 사용할 수 있습니다. `AI_SECRET_KEY`는 기존 설정 호환용 별칭이며, 새 설정은 `LITELLM_API_KEY`를 권장합니다.
+</details>
 
-```dotenv
-LITELLM_BASE_URL=https://your-litellm.example/v1
-LITELLM_API_KEY=your-ai-secret-key
-LITELLM_MODEL=your-proxy-model-name
-```
+---
 
-```bash
-.venv/bin/python 1_gen_ai_hub/main.py litellm-status
-.venv/bin/python 1_gen_ai_hub/main.py litellm-chat "한국어로 한 문장만 답해줘."
-```
+<details>
+<summary><strong>✅ 이 단계의 완료 기준</strong></summary>
 
-애플리케이션 코드에서는 `src/litellm_adapter.py`의 `openai_client()` 또는 `chat_completion()`을 사용합니다.
+- 환경 상태와 deployment 조회 결과를 비밀값 없이 설명할 수 있습니다.
+- 실행 가능한 모델을 확인하고 기본 LLM 호출 결과를 해석할 수 있습니다.
+- 설정 또는 deployment 조회가 실패하면 근거 없는 응답으로 대체하지 않고 원인을 확인합니다.
 
-## 확인
+테스트와 실행 명령은 [루트 README](../README.md)의 검증 안내를 따르세요.
 
-```bash
-.venv/bin/python -m unittest discover -s 1_gen_ai_hub/tests -v
-```
+</details>

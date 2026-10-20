@@ -33,7 +33,7 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 ### AI 코딩 도구로 한 번에 설정하기
 
-Codex, Claude Code 또는 Cursor Agent를 사용한다면 아래 프롬프트를 채팅에 붙여 넣으세요. 터미널 명령을 직접 입력하지 않고 실습 환경을 준비할 수 있습니다. 서비스 key 값은 도구 채팅에 붙여 넣지 말고, 생성된 `.env` 파일에 직접 입력하세요.
+Codex, Claude Code 또는 Cursor Agent를 사용한다면 아래 프롬프트를 채팅에 붙여 넣으세요. 터미널 명령을 직접 입력하지 않고 환경 설정과 기본 테스트까지 진행할 수 있습니다. 서비스 key 값은 도구 채팅에 붙여 넣지 말고, 생성된 `.env` 파일에 직접 입력하세요.
 
 ```text
 현재 열려 있는 Gen AI Hub Hands-on 저장소의 로컬 개발 환경을 설정해줘.
@@ -42,8 +42,14 @@ Codex, Claude Code 또는 Cursor Agent를 사용한다면 아래 프롬프트를
 2. 기존 .venv가 없을 때만 .venv 가상환경을 만들고, requirements.txt의 의존성을 설치해줘.
 3. .env가 없을 때만 .env.example을 복사해서 .env를 만들어줘. 이미 .env가 있으면 절대 덮어쓰거나 내용을 출력하지 마.
 4. .env에 사용자가 입력해야 할 AI Core 필수 변수(AICORE_BASE_URL, AICORE_AUTH_URL, AICORE_CLIENT_ID, AICORE_CLIENT_SECRET, AICORE_RESOURCE_GROUP, LLM_MODEL)의 이름만 안내해줘. 값이나 비밀정보는 읽거나 출력하지 마.
-5. 설치가 끝나면 실행한 작업, 남은 사용자 작업(.env 값 입력), JupyterLab 실행 방법만 짧게 요약해줘.
-6. Git 변경·커밋·push는 하지 말고, 실행 중인 서버도 시작하지 마.
+5. 설치가 끝나면 현재 운영체제에 맞는 .venv Python으로 아래 1~4단계 unit test를 모두 실행해줘. 외부 AI Core 호출이나 서버 기동은 하지 마.
+   - 1_gen_ai_hub/tests
+   - 2_gen_ai_hub_llm/tests
+   - 3_gen_ai_hub_services/tests
+   - 4_agent_patterns/tests
+6. 테스트가 실패하면 소스·노트북·설정을 임의로 수정하지 말고, 실패한 테스트와 원인 요약을 알려줘.
+7. 마지막에는 실행한 작업, 테스트 결과(통과/실패 수), 남은 사용자 작업(.env 값 입력), JupyterLab 실행 방법만 짧게 요약해줘.
+8. Git 변경·커밋·push는 하지 말고, 실행 중인 서버도 시작하지 마.
 ```
 
 ---

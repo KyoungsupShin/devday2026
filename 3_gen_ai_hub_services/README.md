@@ -1,56 +1,57 @@
-# 3. Gen AI Hub Services
+# 03 · Gen AI Hub Services
 
-AI Core Orchestration과 document grounding을 서비스 단위로 확인합니다. 문서 원본의 보관과 검색 근거는 분리되어 있으며, 모든 노트북은 루트 `.env`를 읽습니다.
+AI Core Orchestration과 document grounding을 서비스 단위로 확인합니다. 문서 원본 보관과 검색 근거를 분리해, 답변이 어떤 근거를 참조했는지 확인하는 단계입니다.
 
-## 시작 전 준비
+> 공통 환경 설정과 JupyterLab 실행은 [루트 README](../README.md)에서 진행합니다.
 
-1~2단계의 AI Core 연결을 마친 뒤 [루트 README](../README.md#사전-준비와-설치)의 공통 환경을 사용하세요. 설치가 아직이면 저장소 루트에서 운영체제에 맞는 한 줄을 실행합니다.
+---
 
-**macOS/Linux**
+<details>
+<summary><strong>🔧 시작 전 확인</strong></summary>
 
-```bash
-python3 -m venv .venv && .venv/bin/python -m pip install --upgrade pip -r requirements.txt
-```
+| 실습 범위 | 필요한 준비 |
+| --- | --- |
+| Orchestration | AI Core 인증 정보와 실행 가능한 orchestration deployment |
+| Grounding | `GROUNDING_REPOSITORY_ID` |
+| 고정 deployment 사용 | 선택적으로 `AICORE_ORCHESTRATION_DEPLOYMENT_URL` |
+| Object Storage 연계 | 선택적으로 Object Storage 접속 정보와 bucket |
 
-**Windows PowerShell**
+Grounding 저장소가 비어 있거나 조회에 실패한 상태는 답변 근거가 없는 상태와 구분해서 확인합니다.
 
-```powershell
-py -m venv .venv && .\.venv\Scripts\python.exe -m pip install --upgrade pip -r requirements.txt
-```
+</details>
 
-기본 AI Core 값 외에 grounding 실습에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Orchestration deployment URL을 고정하려면 `AICORE_ORCHESTRATION_DEPLOYMENT_URL`도 설정합니다.
+---
 
-## 실습 순서
+<details>
+<summary><strong>📓 노트북 안내</strong></summary>
 
-1. `notebooks/01_orchestration.ipynb` — 등록된 BTP Orchestration 조회·호출, prompt templating, 콘텐츠 필터, 데이터 마스킹을 확인합니다.
-2. `notebooks/02_grounding.ipynb` — 인덱싱된 문서 chunk를 근거로 질의하고 답변을 확인합니다.
+| 노트북 | 무엇을 하나요? | 확인할 결과 |
+| --- | --- | --- |
+| [01_orchestration.ipynb](notebooks/01_orchestration.ipynb) | 등록된 Orchestration을 조회·호출하고 prompt templating, 콘텐츠 필터, 데이터 마스킹을 살펴봅니다. | 어떤 서비스가 호출되었는지와 입력 보호 기능이 적용되는 위치를 확인합니다. |
+| [02_grounding.ipynb](notebooks/02_grounding.ipynb) | 인덱싱된 문서 chunk를 근거로 질의하고, 답변의 참조 근거를 확인합니다. | 생성된 답변과 실제로 참조한 chunk를 분리해 검토합니다. |
 
-```bash
-.venv/bin/python 3_gen_ai_hub_services/main.py --help
-.venv/bin/python 3_gen_ai_hub_services/main.py orchestration "고객 문의를 요약해줘"
-```
+먼저 Orchestration의 서비스 호출 흐름을 이해한 뒤 Grounding에서 문서 근거가 답변으로 연결되는 방식을 확인하세요.
 
-## 선택: Object Storage → Grounding
+</details>
 
-`02_grounding.ipynb`의 **Object Storage → Grounding** 탭은 UTF-8 `.md` 원본을 SAP BTP Object Storage(S3 호환)에 저장하고, 같은 텍스트를 선택한 vector repository에 인덱싱합니다. 질의는 Object Storage가 아니라 인덱싱된 vector chunk를 근거로 수행합니다.
+---
 
-다음 값을 `.env`에 설정하거나 Object Storage service binding을 `VCAP_SERVICES`로 제공합니다.
+<details>
+<summary><strong>🧩 선택 기능: Object Storage → Grounding</strong></summary>
 
-```dotenv
-OBJECT_STORAGE_ENDPOINT=https://<object-storage-endpoint>
-OBJECT_STORAGE_ACCESS_KEY_ID=
-OBJECT_STORAGE_SECRET_ACCESS_KEY=
-OBJECT_STORAGE_BUCKET=
-OBJECT_STORAGE_REGION=
-OBJECT_STORAGE_PREFIX=grounding
-```
+Grounding 노트북의 Object Storage 연계는 UTF-8 Markdown 원본을 Object Storage에 보관하고, 같은 텍스트를 선택한 vector repository에 인덱싱합니다. 질의는 Object Storage 원본이 아니라 인덱싱된 vector chunk를 근거로 수행됩니다. Grounding UI에서 문서를 삭제해도 원본 object는 유지될 수 있음을 확인하세요.
 
-`OBJECT_STORAGE_PREFIX`의 기본값은 `grounding`입니다. Grounding UI에서 문서를 삭제해도 원본 object는 보존됩니다.
+</details>
 
-## 성공 기준과 확인
+---
 
-등록된 orchestration을 호출하고 grounding 응답이 참조한 근거를 확인합니다. 저장소 미설정·조회 실패 상태를 근거 없는 응답으로 대체하지 않습니다.
+<details>
+<summary><strong>✅ 이 단계의 완료 기준</strong></summary>
 
-```bash
-.venv/bin/python -m unittest discover -s 3_gen_ai_hub_services/tests -v
-```
+- 등록된 Orchestration을 호출하고 서비스 응답을 확인할 수 있습니다.
+- Grounding 답변과 참조 문서 근거를 함께 검토할 수 있습니다.
+- 저장소 미설정·조회 실패를 근거 있는 답변처럼 표시하지 않습니다.
+
+테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.
+
+</details>
