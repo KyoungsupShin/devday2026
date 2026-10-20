@@ -4,6 +4,29 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 > 각 노트북은 화면과 trace를 보여 주고, 실제 로직은 해당 단계의 `src/`에 있습니다.
 
+### 🎬 15초 Agent Patterns 미리보기
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>01 · 병렬 Agent Workflow</strong><br>
+      <video autoplay muted loop playsinline preload="auto" width="100%" aria-label="병렬 Agent Workflow 미리보기">
+        <source src="4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4" type="video/mp4">
+      </video><br>
+      독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
+    </td>
+    <td width="50%" valign="top">
+      <strong>03 · Agent-to-Agent 협업</strong><br>
+      <video autoplay muted loop playsinline preload="auto" width="100%" aria-label="Agent-to-Agent 협업 미리보기">
+        <source src="4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4" type="video/mp4">
+      </video><br>
+      요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
+    </td>
+  </tr>
+</table>
+
+브라우저에서 재생되지 않으면 [01 Workflow MP4](4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4) 또는 [03 A2A MP4](4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4)를 직접 여세요.
+
 ---
 
 <details>
@@ -177,29 +200,6 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | `02_agent_loop_mcp.ipynb` | Tool calling loop | 관찰 → 읽기 전용 도구 호출 → 재관찰 흐름을 확인한다. |
 | `03_agent_to_agent.ipynb` | A2A | Message·Task·Artifact 기반 handoff를 확인한다. |
 | `04_agent_to_agent_advanced.ipynb` | Advanced A2A | Team 협업과 선택적 Codex App Server/SQL Agent를 확인한다. |
-
-### 🎬 15초 Agent Patterns 미리보기
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>01 · 병렬 Agent Workflow</strong><br>
-      <video controls muted preload="metadata" width="100%">
-        <source src="4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4" type="video/mp4">
-      </video><br>
-      독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
-    </td>
-    <td width="50%" valign="top">
-      <strong>03 · Agent-to-Agent 협업</strong><br>
-      <video controls muted preload="metadata" width="100%">
-        <source src="4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4" type="video/mp4">
-      </video><br>
-      요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
-    </td>
-  </tr>
-</table>
-
-브라우저에서 재생되지 않으면 [01 Workflow MP4](4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4) 또는 [03 A2A MP4](4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4)를 직접 여세요.
 
 03·04를 실행하기 전에 JupyterLab과 별도의 터미널에서 아래 서버를 시작합니다.
 
