@@ -16,8 +16,6 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 <img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
 요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
 
-브라우저에서 재생되지 않으면 [01 Workflow MP4](4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4) 또는 [03 A2A MP4](4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4)를 직접 여세요.
-
 ---
 
 <details>
