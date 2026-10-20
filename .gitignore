@@ -21,6 +21,11 @@ results/
 **/results/
 4_agent_patterns/artifacts/debug/
 
+# === 로컬 확장 실습 (Git 미반영) ===
+/5_harness/
+/6_Business_issue/
+/7_Business_Operation_Harness/
+
 # === OS/에디터 ===
 .DS_Store
 **/.DS_Store

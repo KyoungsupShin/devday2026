@@ -1,3 +1,0 @@
-# 04번 금융 Multi-Agent 시각화 선택 기능입니다. 기본 mock orchestration에는 필요하지 않습니다.
-networkx>=3,<4
-pyvis>=0.3,<1
