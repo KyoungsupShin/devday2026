@@ -6,20 +6,15 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 ### 🎬 15초 Agent Patterns 미리보기
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>01 · 병렬 Agent Workflow</strong><br>
-      <img src="4_agent_patterns/assets/thumbnails/gifs/01_agent_workflow.gif" alt="병렬 Agent Workflow 미리보기" width="100%"><br>
-      독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
-    </td>
-    <td width="50%" valign="top">
-      <strong>03 · Agent-to-Agent 협업</strong><br>
-      <img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
-      요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
-    </td>
-  </tr>
-</table>
+<strong>01 · 병렬 Agent Workflow</strong><br>
+<img src="4_agent_patterns/assets/thumbnails/gifs/01_agent_workflow.gif" alt="병렬 Agent Workflow 미리보기" width="100%"><br>
+독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
+
+<br>
+
+<strong>03 · Agent-to-Agent 협업</strong><br>
+<img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
+요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
 
 브라우저에서 재생되지 않으면 [01 Workflow MP4](4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4) 또는 [03 A2A MP4](4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4)를 직접 여세요.
 
