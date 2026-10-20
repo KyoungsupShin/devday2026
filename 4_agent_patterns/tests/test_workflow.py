@@ -1,19 +1,20 @@
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "shared"))
+sys.path.insert(0, str(ROOT / "1_gen_ai_hub" / "src"))
 sys.path.insert(0, str(ROOT / "4_agent_patterns"))
 
 from lab_common.config import Settings
 from lab_common.models import RankedCandidate, RouteDecision
 from src.agent_workflow.agents.registry import EXECUTABLE_AGENT_IDS
 from src.agent_workflow.food_agents import FOOD_AGENT_DEFINITIONS, list_food_agents, plan_work_agents
-from src.agent_workflow.lab_core import inspect_route, run_workflow, run_workflow_steps
+from src.agent_workflow.lab_core import inspect_route, run_workflow, run_workflow_steps, run_workflow_stream
 from src.agent_workflow.prompts import agent_prompt, routing_candidate
 from src.agent_workflow.routing import FAST_ROUTE_CANDIDATES, decide
 from src.agent_workflow.ui import build_workflow_ui, launch_workflow_ui, write_latest_workflow_debug_log
@@ -72,6 +73,35 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result["final_agent_id"], "marketing")
         self.assertEqual(result["result"], "출시안")
         self.assertEqual([call.args[0] for call in run_agent.call_args_list], ["marketing"])
+
+    def test_independent_agents_in_a_stage_run_in_parallel(self):
+        plan = {
+            "brief": "출시안을 검토합니다.",
+            "stages": [
+                {"agent_ids": ["food-rnd", "procurement"], "objective": "독립 검토"},
+                {"agent_ids": ["synthesis"], "objective": "결론"},
+            ],
+            "final_agent_id": "synthesis",
+        }
+        decision = RouteDecision("work", {"chat": 0.1, "work": 0.9}, 0.8, "rerank")
+        specialist_barrier = threading.Barrier(2)
+        worker_threads: set[int] = set()
+
+        def fake_agent(agent_id, _request, _settings, on_delta=None):
+            if agent_id in {"food-rnd", "procurement"}:
+                worker_threads.add(threading.get_ident())
+                specialist_barrier.wait(timeout=1)
+            if on_delta:
+                on_delta(f"{agent_id} 초안")
+            return {"agent_id": agent_id, "agent_label": agent_id, "answer": f"{agent_id} 결과"}
+
+        with patch("src.agent_workflow.lab_core.decide", return_value=decision), patch("src.agent_workflow.lab_core.plan_work_agents", return_value=plan), patch("src.agent_workflow.lab_core.run_food_agent", side_effect=fake_agent):
+            events = list(run_workflow_stream("출시안을 작성해줘", self.settings))
+
+        self.assertEqual(len(worker_threads), 2)
+        starts = [event["trace_event"]["payload"]["agent_id"] for event in events if event["type"] == "agent_started"]
+        self.assertEqual(starts[:2], ["food-rnd", "procurement"])
+        self.assertEqual(events[-1]["result"]["result"], "synthesis 결과")
 
     def test_steps_group_each_agent_execution(self):
         streamed_events = iter([

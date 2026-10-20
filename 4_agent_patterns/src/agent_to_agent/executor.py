@@ -22,8 +22,9 @@ from a2a.types import (
     TaskState,
 )
 from google.protobuf.json_format import MessageToDict
-from lab_common.ai_core import chat_text, chat_tool_completion
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
+from src.agent_clients import chat_tool_completion
 
 from .catalog import AGENT_CATALOG, HANDOFF_SCHEMA_VERSION, SUBAGENT_BY_LABEL
 from .prompts import get_optional_prompt, get_prompt, render_prompt

@@ -5,7 +5,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from lab_common.ai_core import chat_text, chat_text_stream
+from lab_common.llm import chat_text, chat_text_stream
 from lab_common.config import Settings, load_settings
 
 from .agents.registry import EXECUTABLE_AGENT_IDS, FOOD_AGENT_BY_ID, FOOD_AGENT_DEFINITIONS
@@ -51,8 +51,8 @@ def plan_work_agents(
     ]
     contract = (
         'Return JSON only: {"brief":"Korean text","stages":[{"agent_ids":["agent-id"],"objective":"Korean text"}],"final_agent_id":"agent-id"}. '
-        "Select only necessary Agents. Stages are ordered; Agents in a stage may use only the shared brief and prior-stage answers. "
-        "final_agent_id must occur exactly once in the final stage."
+        "Select only necessary Agents. Stages are ordered dependency boundaries; put independent specialists in the same stage so they execute in parallel, and create a later stage only when it needs prior-stage answers. "
+        "final_agent_id must occur exactly once in the final stage; use a dedicated final synthesis stage whenever a synthesis is needed."
     )
     history = _history_text(conversation_history)
     prompt = f"현재 사용자 요청: {request}\n전문 Agent 목록: {json.dumps(catalog, ensure_ascii=False)}"

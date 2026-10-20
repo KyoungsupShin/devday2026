@@ -14,7 +14,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 PATTERN_ROOT = Path(__file__).resolve().parent
-sys.path[:0] = [str(ROOT / "shared"), str(PATTERN_ROOT)]
+sys.path[:0] = [str(ROOT / "1_gen_ai_hub" / "src"), str(PATTERN_ROOT)]
 
 from lab_common.config import load_settings
 from src.agent_loop_mcp.lab_core import run_food_mcp_loop

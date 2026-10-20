@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "shared"), str(Path(__file__).resolve().parent)]
+sys.path[:0] = [str(ROOT / "1_gen_ai_hub" / "src"), str(Path(__file__).resolve().parent)]
 
 from lab_common.config import load_settings
 from src.environment import deployment_status, environment_status

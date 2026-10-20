@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "shared"))
+sys.path.insert(0, str(ROOT / "1_gen_ai_hub" / "src"))
 sys.path.insert(0, str(ROOT / "4_agent_patterns"))
 
 from src.agent_to_agent_advanced import codex_app_server

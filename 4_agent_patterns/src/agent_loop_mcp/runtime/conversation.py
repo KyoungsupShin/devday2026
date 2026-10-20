@@ -5,7 +5,7 @@ import json
 import re
 from typing import Any, TypedDict
 
-from lab_common.ai_core import chat_text
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
 
 from ..prompts import get_prompt

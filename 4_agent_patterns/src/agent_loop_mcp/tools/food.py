@@ -5,7 +5,8 @@ from threading import Lock
 from typing import Any
 
 import requests
-from lab_common.ai_core import chat_text, generate_image_data_url
+from lab_common.llm import chat_text
+from src.agent_clients import generate_image_data_url
 
 from ..prompts import get_prompt
 

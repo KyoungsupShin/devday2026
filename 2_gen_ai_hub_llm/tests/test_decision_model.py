@@ -7,7 +7,7 @@ import unittest
 import json
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "shared"))
+sys.path.insert(0, str(ROOT / "1_gen_ai_hub" / "src"))
 sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
 from lab_common.config import Settings

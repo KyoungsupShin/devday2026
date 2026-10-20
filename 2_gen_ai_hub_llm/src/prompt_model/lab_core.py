@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Callable, Sequence
 
-from lab_common.ai_core import chat_text, chat_text_stream
+from lab_common.llm import chat_text, chat_text_stream
 from lab_common.config import Settings
 
 MAX_CHAT_HISTORY_MESSAGES = 12

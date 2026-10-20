@@ -8,7 +8,7 @@ import json
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "shared"))
+sys.path.insert(0, str(ROOT / "1_gen_ai_hub" / "src"))
 sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
 from lab_common.config import Settings
@@ -19,6 +19,7 @@ from src.embeddings.lab_core import (
     retrieve_similar_texts,
 )
 from src.business_embedding.lab_core import (
+    label_image,
     holdout_indices_by_label,
     recommend_business_queue,
     run_business_embedding_lab,
@@ -195,6 +196,50 @@ class LabCoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "결과 수"):
             compare_embeddings(
                 ["one", "two"], settings(), embedder=lambda *_: np.asarray([[1, 0]])
+            )
+
+    def test_label_image_assigns_closest_candidate_label(self):
+        image_calls: list[tuple[list[str], str | None]] = []
+        text_calls: list[tuple[list[str], str | None]] = []
+
+        def fake_image_embedder(paths, _settings, model):
+            image_calls.append(([str(path) for path in paths], model))
+            return np.asarray([[1, 0]], dtype=float)
+
+        def fake_text_embedder(labels, _settings, model):
+            text_calls.append((list(labels), model))
+            return np.asarray([[0.2, 0.8], [0.9, 0.1]], dtype=float)
+
+        outcome = label_image(
+            "invoice.png",
+            ["food", "document"],
+            settings(),
+            model="amazon--titan-embed-image",
+            image_embedder=fake_image_embedder,
+            text_embedder=fake_text_embedder,
+        )
+
+        self.assertEqual(
+            image_calls,
+            [(["invoice.png"], "amazon--titan-embed-image")],
+        )
+        self.assertEqual(
+            text_calls,
+            [(["food", "document"], "amazon--titan-embed-image")],
+        )
+        self.assertEqual(outcome["image_name"], "invoice.png")
+        self.assertEqual(outcome["embedding_dimensions"], 2)
+        self.assertEqual(outcome["predicted_label"], "document")
+        self.assertGreater(
+            outcome["label_scores"][0]["similarity"],
+            outcome["label_scores"][1]["similarity"],
+        )
+        json.dumps(outcome)
+
+    def test_label_image_requires_candidate_labels(self):
+        with self.assertRaisesRegex(ValueError, "후보 라벨"):
+            label_image(
+                "one.png", [], settings(), image_embedder=lambda *_: self.fail("SDK should not be called")
             )
 
     def test_retrieve_similar_texts_ranks_query_documents_in_one_batch(self):

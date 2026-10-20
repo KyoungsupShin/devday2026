@@ -112,8 +112,8 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | 노트북 | 실습 내용 | 확인 포인트 |
 | --- | --- | --- |
 | `00_learning_roadmap.ipynb` | 전체 학습 흐름과 사전 준비 | 01~04 단계의 연결 관계를 이해한다. |
-| `00_environment.ipynb` | 설정 누락과 RUNNING deployment 확인 | 비밀값 없이 인증·모델 상태를 점검한다. |
-| `01_openai_compatible_chat.ipynb` | AI Core LLM 채팅 호출 | OpenAI-compatible 호출 결과를 확인한다. |
+| `01_environment.ipynb` | 설정 누락과 RUNNING deployment 확인 | 비밀값 없이 인증·모델 상태를 점검한다. |
+| `02_openai_compatible_chat.ipynb` | AI Core LLM 채팅 호출 | OpenAI-compatible 호출 결과를 확인한다. |
 
 ```bash
 .venv/bin/python 1_gen_ai_hub/main.py status
@@ -177,6 +177,29 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | `02_agent_loop_mcp.ipynb` | Tool calling loop | 관찰 → 읽기 전용 도구 호출 → 재관찰 흐름을 확인한다. |
 | `03_agent_to_agent.ipynb` | A2A | Message·Task·Artifact 기반 handoff를 확인한다. |
 | `04_agent_to_agent_advanced.ipynb` | Advanced A2A | Team 협업과 선택적 Codex App Server/SQL Agent를 확인한다. |
+
+### 🎬 15초 Agent Patterns 미리보기
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>01 · 병렬 Agent Workflow</strong><br>
+      <video controls muted preload="metadata" width="100%">
+        <source src="4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4" type="video/mp4">
+      </video><br>
+      독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
+    </td>
+    <td width="50%" valign="top">
+      <strong>03 · Agent-to-Agent 협업</strong><br>
+      <video controls muted preload="metadata" width="100%">
+        <source src="4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4" type="video/mp4">
+      </video><br>
+      요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
+    </td>
+  </tr>
+</table>
+
+브라우저에서 재생되지 않으면 [01 Workflow MP4](4_agent_patterns/assets/thumbnails/videos/01_agent_workflow.mp4) 또는 [03 A2A MP4](4_agent_patterns/assets/thumbnails/videos/03_agent_to_agent.mp4)를 직접 여세요.
 
 03·04를 실행하기 전에 JupyterLab과 별도의 터미널에서 아래 서버를 시작합니다.
 

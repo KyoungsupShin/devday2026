@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "shared"), str(ROOT / "3_gen_ai_hub_services")]
+sys.path[:0] = [str(ROOT / "1_gen_ai_hub" / "src"), str(ROOT / "3_gen_ai_hub_services")]
 
 from lab_common.config import Settings
 from src.grounding.object_storage import (

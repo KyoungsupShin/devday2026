@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT / "shared"), str(ROOT / "4_agent_patterns")]
+sys.path[:0] = [str(ROOT / "1_gen_ai_hub" / "src"), str(ROOT / "4_agent_patterns")]
 
 from lab_common.config import Settings
 from src.agent_to_agent import sop_grounding

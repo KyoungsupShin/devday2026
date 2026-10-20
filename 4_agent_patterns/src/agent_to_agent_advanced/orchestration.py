@@ -11,8 +11,9 @@ from typing import Any
 from uuid import uuid4
 
 from a2a.types import AgentCard
-from lab_common.ai_core import chat_text, chat_tool_completion
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
+from src.agent_clients import chat_tool_completion
 
 from .catalog import (
     AGENT_CATALOG,

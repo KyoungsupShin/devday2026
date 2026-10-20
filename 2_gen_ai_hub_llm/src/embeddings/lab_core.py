@@ -7,31 +7,11 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from lab_common.ai_core import apply_ai_core_environment
 from lab_common.config import Settings
+from src.business_embedding.lab_core import embed_texts
 
 
-def embed_texts(
-    texts: Sequence[str], settings: Settings, model: str | None = None
-) -> np.ndarray:
-    if not texts:
-        raise ValueError("texts must not be empty.")
-    apply_ai_core_environment(settings)
-    from gen_ai_hub.proxy.native.openai import embeddings
-
-    response = embeddings.create(
-        input=list(texts),
-        model_name=model or os.getenv("EMBED_MODEL", "text-embedding-3-small"),
-    )
-    return np.asarray(
-        [
-            item.embedding
-            for item in sorted(
-                response.data, key=lambda item: getattr(item, "index", 0)
-            )
-        ],
-        dtype=np.float64,
-    )
+DEFAULT_EMBED_MODEL = "amazon--titan-embed-image"
 
 
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
@@ -65,7 +45,7 @@ def compare_embeddings(
     selected_model = (
         model.strip()
         if model and model.strip()
-        else os.getenv("EMBED_MODEL", "text-embedding-3-small")
+        else os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
     )
     vectors = np.asarray(embedder(cleaned, settings, selected_model), dtype=np.float64)
     if vectors.ndim != 2 or vectors.shape[1] == 0:
@@ -119,7 +99,7 @@ def retrieve_similar_texts(
     selected_model = (
         model.strip()
         if model and model.strip()
-        else os.getenv("EMBED_MODEL", "text-embedding-3-small")
+        else os.getenv("EMBED_MODEL", DEFAULT_EMBED_MODEL)
     )
     vectors = np.asarray(
         embedder([cleaned_query, *cleaned_documents], settings, selected_model),

@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from lab_common.config import Settings, save_grounding_repository_id
+from lab_common.config import REPOSITORY_ROOT, Settings, save_grounding_repository_id
 from lab_common.grounding_repository import delete_document, list_documents, upload_text_document
 
 
@@ -30,6 +30,9 @@ class Response:
 
 
 class GroundingRepositoryTests(unittest.TestCase):
+    def test_repository_root_remains_the_project_root_after_package_move(self):
+        self.assertEqual(REPOSITORY_ROOT, Path(__file__).resolve().parents[4])
+
     def test_repository_id_is_added_then_updated_in_env_file(self):
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"

@@ -21,4 +21,5 @@ scipy>=1.14,<2
 a2a-sdk[fastapi]>=1.2,<2
 hdbcli>=2.30,<3
 boto3>=1.35,<2
+aiobotocore>=3.2,<4
 

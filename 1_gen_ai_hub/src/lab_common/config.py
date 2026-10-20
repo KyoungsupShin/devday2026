@@ -20,7 +20,7 @@ except ImportError:  # Allows the local-only workflow/tests to run before pip in
                     os.environ[key.strip()] = value.strip()
         return True
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_LLM_MODEL = "gpt-5.6-luna"
 DEFAULT_LLM_SEED = 20261018
 

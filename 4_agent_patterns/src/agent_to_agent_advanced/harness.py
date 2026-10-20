@@ -12,7 +12,7 @@ import random
 from collections.abc import Callable
 from typing import Any
 
-from lab_common.ai_core import chat_text
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
 
 from .catalog import DEFAULT_REQUEST

@@ -9,8 +9,9 @@ from typing import Callable
 
 import requests
 
-from lab_common.ai_core import api_headers, chat_text, list_running_deployments
+from lab_common.ai_core import api_headers, list_running_deployments
 from lab_common.config import Settings
+from lab_common.llm import chat_text
 from lab_common.models import Candidate, RankedCandidate
 
 APPLICATION_DECISIONS = [

@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from queue import Queue
 from typing import Any
 
-from lab_common.ai_core import chat_text
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
 from lab_common.models import TraceEvent
 
@@ -12,7 +14,6 @@ from .agents.registry import FOOD_AGENT_BY_ID
 from .food_agents import plan_work_agents, run_food_agent
 from .prompts import get_prompt
 from .routing import FAST_ROUTE_CANDIDATES, decide
-
 
 CLARIFICATION_REQUIRED_PROMPT = get_prompt("clarification_required")
 
@@ -57,6 +58,33 @@ def _agent_request(
     if prior_answers:
         sections.append(f"[선행 Agent 결과]\n{prior_answers}")
     return "\n\n".join(sections)
+
+
+def _run_stage_agent(
+    agent_id: str,
+    request: str,
+    brief: str,
+    objective: str,
+    prior_results: dict[str, dict[str, str]],
+    settings: Settings,
+    events: Queue[tuple[str, str, Any]],
+) -> None:
+    """Run one blocking specialist call and relay its stream to the main generator."""
+
+    def on_delta(delta: str) -> None:
+        events.put(("agent_delta", agent_id, delta))
+
+    try:
+        result = run_food_agent(
+            agent_id,
+            _agent_request(request, brief, objective, prior_results),
+            settings,
+            on_delta=on_delta,
+        )
+    except Exception as error:  # noqa: BLE001 - relay any SDK failure to the main stream
+        events.put(("agent_error", agent_id, error))
+    else:
+        events.put(("agent_completed", agent_id, result))
 
 
 def run_workflow_stream(
@@ -113,27 +141,66 @@ def run_workflow_stream(
 
     results: dict[str, dict[str, str]] = {}
     for stage in plan["stages"]:
-        for agent_id in stage["agent_ids"]:
+        stage_agent_ids = list(stage["agent_ids"])
+        # A stage is the workflow's dependency boundary. Every Agent in it gets
+        # the same immutable snapshot of prior-stage results, so no Agent waits
+        # for a peer in the same stage. This lets independent specialists call
+        # the blocking LLM SDK concurrently while retaining a synchronous
+        # streaming API for the notebook and Gradio UI.
+        prior_results = dict(results)
+        stage_events: Queue[tuple[str, str, Any]] = Queue()
+        stage_results: dict[str, dict[str, str]] = {}
+
+        # Emit every start state before dispatching any work so the UI immediately
+        # presents all independent specialists as running.
+        for agent_id in stage_agent_ids:
             agent = FOOD_AGENT_BY_ID[agent_id]
             yield {
                 "type": "agent_started",
                 "trace_event": _append_trace(trace, "agent_started", {"agent_id": agent.id, "label": agent.label}),
             }
-            deltas: list[str] = []
-            result = run_food_agent(
-                agent_id,
-                _agent_request(request, plan["brief"], stage["objective"], results),
-                active_settings,
-                on_delta=deltas.append,
-            )
-            for delta in deltas:
-                yield {"type": "agent_delta", "agent_id": agent_id, "delta": delta}
-            results[agent_id] = result
-            yield {
-                "type": "agent_completed",
-                "agent_result": result,
-                "trace_event": _append_trace(trace, "agent_completed", {"agent_id": agent.id, "label": agent.label}),
-            }
+
+        failures: list[Exception] = []
+        with ThreadPoolExecutor(
+            max_workers=len(stage_agent_ids), thread_name_prefix="workflow-agent"
+        ) as executor:
+            for agent_id in stage_agent_ids:
+                executor.submit(
+                    _run_stage_agent,
+                    agent_id,
+                    request,
+                    plan["brief"],
+                    stage["objective"],
+                    prior_results,
+                    active_settings,
+                    stage_events,
+                )
+
+            remaining = len(stage_agent_ids)
+            while remaining:
+                event_type, agent_id, payload = stage_events.get()
+                if event_type == "agent_delta":
+                    yield {"type": "agent_delta", "agent_id": agent_id, "delta": payload}
+                    continue
+                remaining -= 1
+                if event_type == "agent_error":
+                    failures.append(payload)
+                    continue
+                result = payload
+                stage_results[agent_id] = result
+                agent = FOOD_AGENT_BY_ID[agent_id]
+                yield {
+                    "type": "agent_completed",
+                    "agent_result": result,
+                    "trace_event": _append_trace(trace, "agent_completed", {"agent_id": agent.id, "label": agent.label}),
+                }
+
+        if failures:
+            raise failures[0]
+        # Keep downstream prompt ordering stable even though same-stage Agents
+        # complete in nondeterministic order.
+        for agent_id in stage_agent_ids:
+            results[agent_id] = stage_results[agent_id]
 
     final_agent_id = plan["final_agent_id"]
     yield {
@@ -169,27 +236,27 @@ def run_workflow_steps(
     conversation_history: list[dict[str, Any]] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield one plan or one completed Agent execution at a time for the notebook."""
-    stream = iter(run_workflow_stream(request, settings, min_margin, conversation_history))
-    for event in stream:
+    active_agents: dict[str, list[dict[str, Any]]] = {}
+    for event in run_workflow_stream(request, settings, min_margin, conversation_history):
         if event["type"] == "orchestration_plan":
             yield {"step": "plan", "plan": event["plan"], "trace": event["trace_event"]}
         elif event["type"] == "route":
             yield {"step": "route", "decision": event["trace_event"]["payload"], "trace": event["trace_event"]}
         elif event["type"] == "agent_started":
-            agent_events = [event]
-            for agent_event in stream:
-                agent_events.append(agent_event)
-                if agent_event["type"] != "agent_completed":
-                    continue
-                result = agent_event["agent_result"]
-                yield {
-                    "step": "agent",
-                    "agent_id": result["agent_id"],
-                    "agent_label": result["agent_label"],
-                    "answer": result["answer"],
-                    "deltas": [item["delta"] for item in agent_events if item["type"] == "agent_delta"],
-                    "trace": [item["trace_event"] for item in agent_events if "trace_event" in item],
-                }
-                break
+            agent_id = event["trace_event"]["payload"]["agent_id"]
+            active_agents[agent_id] = [event]
+        elif event["type"] == "agent_delta":
+            active_agents.setdefault(event["agent_id"], []).append(event)
+        elif event["type"] == "agent_completed":
+            result = event["agent_result"]
+            agent_events = active_agents.pop(result["agent_id"], []) + [event]
+            yield {
+                "step": "agent",
+                "agent_id": result["agent_id"],
+                "agent_label": result["agent_label"],
+                "answer": result["answer"],
+                "deltas": [item["delta"] for item in agent_events if item["type"] == "agent_delta"],
+                "trace": [item["trace_event"] for item in agent_events if "trace_event" in item],
+            }
         elif event["type"] == "complete":
             yield {"step": "complete", "result": event["result"]}

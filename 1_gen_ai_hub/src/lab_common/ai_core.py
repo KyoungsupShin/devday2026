@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import base64
 import os
-from collections.abc import Iterator
 from typing import Any
 
 import requests
@@ -56,7 +54,7 @@ def _deployment_model_name(deployment: Any) -> str:
     )
 
 
-def _direct_model_deployment_url(settings: Settings, model: str) -> str:
+def model_deployment_url(settings: Settings, model: str) -> str:
     """Find the configured RUNNING model deployment through the AI Core SDK."""
     control_client = _aicore_sdk_client(settings, f"{settings.base_url}/v2")
     configured_id = settings.llm_deployment_id if model == settings.llm_model else ""
@@ -143,109 +141,8 @@ def orchestration_url(settings: Settings) -> str:
     raise RuntimeError("RUNNING orchestration 배포를 찾지 못했습니다.")
 
 
-def chat_text(
-    settings: Settings, messages: list[dict[str, str]], model: str | None = None
-) -> str:
-    """Call the selected model deployment through the SAP AI Core Python SDK."""
-    selected_model = model or settings.llm_model
-    request_body: dict[str, Any] = {
-        "model": selected_model,
-        "messages": messages,
-        "seed": settings.llm_seed,
-    }
-    deployment_url = _direct_model_deployment_url(settings, selected_model)
-    inference_client = _aicore_sdk_client(settings, deployment_url)
-    response = inference_client.rest_client.post(
-        "/chat/completions?api-version=2025-03-01-preview",
-        body=request_body,
-    )
-    try:
-        content = str(response["choices"][0]["message"]["content"] or "")
-    except (KeyError, IndexError, TypeError) as error:
-        raise RuntimeError(
-            "AI Core LLM 응답에 텍스트 completion이 없습니다."
-        ) from error
-    return content
-
-
-def generate_image_data_url(settings: Settings, prompt: str, model: str) -> str:
-    """Generate one image through an AI Core Gemini image deployment.
-
-    The native Google Vertex client returns image bytes as inline data.  This
-    adapter turns them into a portable data URL for a local HTML preview; it
-    never publishes the image to an external host.
-    """
-    apply_ai_core_environment(settings)
-    try:
-        from gen_ai_hub.proxy.native.google_vertexai.clients import GenerativeModel
-        from vertexai.generative_models import GenerationConfig
-    except ImportError as error:
-        raise RuntimeError(
-            "Gemini 이미지 생성 의존성이 없습니다. requirements.txt를 다시 설치하세요."
-        ) from error
-    response = GenerativeModel(model_name=model).generate_content(
-        prompt,
-        generation_config=GenerationConfig(response_modalities=["IMAGE"]),
-    )
-    for candidate in getattr(response, "candidates", []) or []:
-        for part in getattr(getattr(candidate, "content", None), "parts", []) or []:
-            inline_data = getattr(part, "inline_data", None)
-            data = getattr(inline_data, "data", None)
-            mime_type = getattr(inline_data, "mime_type", None) or "image/png"
-            if data:
-                image_bytes = data if isinstance(data, bytes) else bytes(data)
-                encoded = base64.b64encode(image_bytes).decode("ascii")
-                return f"data:{mime_type};base64,{encoded}"
-    raise RuntimeError("Gemini 이미지 생성 응답에 inline image data가 없습니다.")
-
-
-def chat_tool_completion(
-    settings: Settings,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-    model: str | None = None,
-    tool_choice: str | dict[str, Any] = "auto",
-) -> Any:
-    """Request one native chat completion through the SAP GenAI Hub SDK.
-
-    ``tool_choice="none"`` is used for the response after local tools have
-    completed.  Keeping both turns on this client preserves the required
-    assistant-tool_calls -> tool-message protocol.
-    """
-    selected_model = model or settings.llm_model
-    request: dict[str, Any] = {
-        "model_name": selected_model,
-        "messages": messages,
-        "tools": tools,
-        "tool_choice": tool_choice,
-        "seed": settings.llm_seed,
-    }
-    if settings.llm_deployment_id and selected_model == settings.llm_model:
-        request["deployment_id"] = settings.llm_deployment_id
-
-    apply_ai_core_environment(settings)
-    try:
-        from gen_ai_hub.proxy.native.openai import chat
-    except ImportError as error:
-        raise RuntimeError(
-            "sap-ai-sdk-gen이 없습니다. pip install -r requirements.txt를 실행하세요."
-        ) from error
-    return chat.completions.create(**request)
-
-
 def llm_model_params(settings: Settings, *, max_tokens: int) -> dict[str, int]:
     """Return SDK-safe Luna generation controls for prompt-templating services."""
     # gpt-5.6-luna accepts a stable seed, while non-default temperature values
     # are rejected by the deployment. Keep the model's required default temperature.
     return {"max_tokens": max_tokens, "seed": settings.llm_seed}
-
-
-def chat_text_stream(
-    settings: Settings,
-    messages: list[dict[str, str]],
-    model: str | None = None,
-) -> Iterator[str]:
-    """Yield the completed response through the SDK's synchronous REST client."""
-    response = chat_text(settings, messages, model)
-    if response:
-        yield response

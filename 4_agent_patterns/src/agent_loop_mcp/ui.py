@@ -9,7 +9,7 @@ from typing import Any
 
 import gradio as gr
 import mistune
-from lab_common.ai_core import chat_text
+from lab_common.llm import chat_text
 from lab_common.config import Settings, load_settings
 
 from .context import build_observed_request

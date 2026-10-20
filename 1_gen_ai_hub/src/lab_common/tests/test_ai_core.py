@@ -5,14 +5,12 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from lab_common.ai_core import (
     _chat_timeout_seconds,
     _deployment_model_name,
-    chat_text,
     llm_model_params,
 )
 from lab_common.config import DEFAULT_LLM_MODEL, DEFAULT_LLM_SEED, Settings
@@ -50,38 +48,4 @@ class StreamContentTests(unittest.TestCase):
             llm_model_params(self.settings, max_tokens=200),
             {"max_tokens": 200, "seed": 1234},
         )
-
-    def test_direct_chat_sends_the_shared_seed(self):
-        inference_client = Mock()
-        inference_client.rest_client.post.return_value = {
-            "choices": [{"message": {"content": "OK"}}]
-        }
-        with (
-            patch(
-                "lab_common.ai_core._direct_model_deployment_url",
-                return_value="https://deployment.example",
-            ),
-            patch(
-                "lab_common.ai_core._aicore_sdk_client",
-                return_value=inference_client,
-            ),
-        ):
-            self.assertEqual(
-                chat_text(self.settings, [{"role": "user", "content": "test"}]),
-                "OK",
-            )
-            self.assertEqual(
-                chat_text(self.settings, [{"role": "user", "content": "test"}]),
-                "OK",
-            )
-
-        self.assertEqual(
-            inference_client.rest_client.post.call_args.kwargs["body"],
-            {
-                "model": "gpt-5.6-luna",
-                "messages": [{"role": "user", "content": "test"}],
-                "seed": 1234,
-            },
-        )
-        self.assertEqual(inference_client.rest_client.post.call_count, 2)
 
