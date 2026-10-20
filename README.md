@@ -1,12 +1,14 @@
 # Gen AI Hub Hands-on
 
-SAP BTP AI Core와 Gen AI Hub를 이용해 **모델 연결 → LLM 활용 → Grounding 서비스 → Agent 협업**을 단계적으로 익히는 실습 저장소입니다.
+BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-First → AI-Native**로 이어지는 구현 방식을 이해하며 Joule A2A 구현을 위한 Hands-on을 진행하는 실습 저장소입니다.
 
 > 각 노트북은 화면과 trace를 보여 주고, 실제 로직은 해당 단계의 `src/`에 있습니다.
 
 ---
 
-## 🧭 학습 흐름
+<details>
+<summary><strong>🧭 학습 흐름</strong></summary>
+
 
 ```text
 01. 환경 연결  →  02. LLM 활용  →  03. 서비스·Grounding  →  04. Agent 협업
@@ -21,9 +23,13 @@ SAP BTP AI Core와 Gen AI Hub를 이용해 **모델 연결 → LLM 활용 → Gr
 
 권장 순서는 **01 → 02 → 03 → 04**입니다. 04의 A2A 실습은 별도 터미널에서 로컬 Agent 서버를 실행해야 합니다.
 
+</details>
+
 ---
 
-## 🚀 시작하기
+<details>
+<summary><strong>🚀 시작하기</strong></summary>
+
 
 ### AI 코딩 도구로 한 번에 설정하기
 
@@ -83,9 +89,13 @@ LLM_MODEL=
 
 Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.exe`를 사용합니다.
 
+</details>
+
 ---
 
-## 📚 아젠다별 실습
+<details>
+<summary><strong>📚 아젠다별 실습</strong></summary>
+
 
 필요한 아젠다를 펼쳐 상세 노트북과 실행 방법을 확인하세요.
 
@@ -171,9 +181,13 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 
 </details>
 
+</details>
+
 ---
 
-## 🔐 환경변수와 안전 경계
+<details>
+<summary><strong>🔐 환경변수와 안전 경계</strong></summary>
+
 
 | 기능 | 추가 환경변수 | 사용 단계 |
 | --- | --- | --- |
@@ -188,9 +202,13 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 - Outlook 발송은 UI에서 사람이 내용을 확인·승인하고, 별도 인증과 `ALLOW_WRITE_TOOLS=true`가 모두 설정된 경우에만 가능합니다.
 - Grounding과 Object Storage에는 실습 권한 범위의 문서만 사용합니다.
 
+</details>
+
 ---
 
-## ✅ 검증
+<details>
+<summary><strong>✅ 검증</strong></summary>
+
 
 ```bash
 .venv/bin/python -m unittest discover -s 1_gen_ai_hub/tests -v
@@ -198,3 +216,5 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 .venv/bin/python -m unittest discover -s 3_gen_ai_hub_services/tests -v
 .venv/bin/python -m unittest discover -s 4_agent_patterns/tests -v
 ```
+
+</details>
