@@ -25,6 +25,23 @@ SAP BTP AI Core와 Gen AI Hub를 이용해 **모델 연결 → LLM 활용 → Gr
 
 ## 🚀 시작하기
 
+### AI 코딩 도구로 한 번에 설정하기
+
+Codex, Claude Code 또는 Cursor Agent를 사용한다면 아래 프롬프트를 채팅에 붙여 넣으세요. 터미널 명령을 직접 입력하지 않고 실습 환경을 준비할 수 있습니다. 서비스 key 값은 도구 채팅에 붙여 넣지 말고, 생성된 `.env` 파일에 직접 입력하세요.
+
+```text
+현재 열려 있는 Gen AI Hub Hands-on 저장소의 로컬 개발 환경을 설정해줘.
+
+1. 저장소 루트에서 Python 3.11 이상을 확인하고, 없으면 현재 버전을 알려줘.
+2. 기존 .venv가 없을 때만 .venv 가상환경을 만들고, requirements.txt의 의존성을 설치해줘.
+3. .env가 없을 때만 .env.example을 복사해서 .env를 만들어줘. 이미 .env가 있으면 절대 덮어쓰거나 내용을 출력하지 마.
+4. .env에 사용자가 입력해야 할 AI Core 필수 변수(AICORE_BASE_URL, AICORE_AUTH_URL, AICORE_CLIENT_ID, AICORE_CLIENT_SECRET, AICORE_RESOURCE_GROUP, LLM_MODEL)의 이름만 안내해줘. 값이나 비밀정보는 읽거나 출력하지 마.
+5. 설치가 끝나면 실행한 작업, 남은 사용자 작업(.env 값 입력), JupyterLab 실행 방법만 짧게 요약해줘.
+6. Git 변경·커밋·push는 하지 말고, 실행 중인 서버도 시작하지 마.
+```
+
+---
+
 ### 1. 설치
 
 저장소 루트에서 가상환경과 공통 의존성을 설치합니다.
@@ -70,7 +87,11 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 
 ## 📚 아젠다별 실습
 
-### 01 · Gen AI Hub와 BTP AI Core
+필요한 아젠다를 펼쳐 상세 노트북과 실행 방법을 확인하세요.
+
+<details>
+<summary><strong>01 · Gen AI Hub와 BTP AI Core</strong> — 환경과 모델 연결</summary>
+
 
 | 노트북 | 실습 내용 | 확인 포인트 |
 | --- | --- | --- |
@@ -94,9 +115,13 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 
 </details>
 
+</details>
+
 ---
 
-### 02 · Gen AI Hub LLM
+<details>
+<summary><strong>02 · Gen AI Hub LLM</strong> — Prompt·Embedding·Reranking</summary>
+
 
 | 노트북 | 실습 내용 | 확인 포인트 |
 | --- | --- | --- |
@@ -107,9 +132,13 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 
 필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. 외부 reranker는 `RERANK_ENDPOINT`, `RERANK_API_KEY`로 연결할 수 있습니다.
 
+</details>
+
 ---
 
-### 03 · Gen AI Hub Services
+<details>
+<summary><strong>03 · Gen AI Hub Services</strong> — Orchestration·Grounding</summary>
+
 
 | 노트북 | 실습 내용 | 확인 포인트 |
 | --- | --- | --- |
@@ -118,9 +147,13 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 
 Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연계는 선택 사항이며, 원본 문서는 Storage에 보관되고 질의는 인덱싱된 vector chunk를 근거로 수행합니다.
 
+</details>
+
 ---
 
-### 04 · Agent Patterns
+<details>
+<summary><strong>04 · Agent Patterns</strong> — Workflow·Tool Calling·A2A</summary>
+
 
 | 노트북 | 협업 패턴 | 확인 포인트 |
 | --- | --- | --- |
@@ -135,6 +168,8 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | --- | --- | --- |
 | 03 `agent_to_agent` | `.venv/bin/python 4_agent_patterns/main.py fnb-a2a-local` | 9111~9122 |
 | 04 `agent_to_agent_advanced` | `.venv/bin/python 4_agent_patterns/main.py fnb-a2a-advanced-local` | 9211~9223 |
+
+</details>
 
 ---
 
