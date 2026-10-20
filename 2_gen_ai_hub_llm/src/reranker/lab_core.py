@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Callable
 
@@ -46,6 +47,8 @@ class DecisionResult:
     engine: str
     reason: str
     requires_human_review: bool
+    policy_summary: str = ""
+    policy_id: str = ""
 
 
 def _summary(case_text: str, policy: str, settings: Settings) -> str:
@@ -185,17 +188,21 @@ def recommend(
         )
     review = bool(reasons)
     return DecisionResult(
-        "manual-review" if review else winner.candidate.id,
-        {item.candidate.id: item.score for item in ranked},
-        margin,
-        engine,
-        "LLM이 정책 문서와 행동 사실을 요약한 뒤 Cohere가 후보 관련도를 순위화했습니다. "
-        + (
-            " ".join(reasons)
-            if reasons
-            else "점수와 margin 기준을 충족해 추천을 생성했습니다."
+        recommendation="manual-review" if review else winner.candidate.id,
+        scores={item.candidate.id: item.score for item in ranked},
+        margin=margin,
+        engine=engine,
+        reason=(
+            "LLM이 정책 문서와 행동 사실을 요약한 뒤 Cohere가 후보 관련도를 순위화했습니다. "
+            + (
+                " ".join(reasons)
+                if reasons
+                else "점수와 margin 기준을 충족해 추천을 생성했습니다."
+            )
         ),
-        review,
+        requires_human_review=review,
+        policy_summary=summary,
+        policy_id=f"sha256:{sha256(policy.encode('utf-8')).hexdigest()[:12]}",
     )
 
 
@@ -232,6 +239,12 @@ def run_decision_recommendation(
         "margin": outcome.margin,
         "engine": outcome.engine,
         "reason": outcome.reason,
+        "policy_summary": outcome.policy_summary,
+        "policy_id": outcome.policy_id,
+        "decision_thresholds": {
+            "min_score": min_score,
+            "min_margin": min_margin,
+        },
         "ranked_candidates": [
             {
                 "rank": index + 1,

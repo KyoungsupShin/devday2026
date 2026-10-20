@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from collections.abc import Mapping
 from typing import Any
 
 from lab_common.ai_core import (
@@ -35,6 +36,56 @@ def _required_query(query: str) -> str:
     return cleaned
 
 
+def _value(value: Any, key: str) -> Any:
+    if isinstance(value, Mapping):
+        return value.get(key)
+    return getattr(value, key, None)
+
+
+def _jsonable(value: Any) -> Any:
+    """Convert SDK response metadata to values suitable for a notebook/UI."""
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if hasattr(value, "model_dump"):
+        return _jsonable(value.model_dump(mode="json"))
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    return str(value)
+
+
+def _grounding_trace(response: Any, *, source: str) -> dict[str, Any]:
+    """Expose grounding-module metadata when the service returns it.
+
+    The managed service may return retrieved chunks, document IDs, or citations in
+    ``data`` depending on repository type and service version.  Do not invent
+    citations when that metadata is absent.
+    """
+    intermediate = _value(response, "intermediate_results")
+    grounding = _value(intermediate, "grounding")
+    if grounding is None:
+        return {
+            "configured_source": source,
+            "metadata_available": False,
+            "message": "Grounding module metadata was not returned by the service.",
+            "data": None,
+        }
+    return {
+        "configured_source": source,
+        "metadata_available": True,
+        "message": str(_value(grounding, "message") or ""),
+        "data": _jsonable(_value(grounding, "data")),
+    }
+
+
+def _grounded_result(response: Any, *, source: str) -> dict[str, Any]:
+    return {
+        "answer": str(response.final_result.choices[0].message.content),
+        "grounding": _grounding_trace(response, source=source),
+    }
+
+
 def build_help_grounded_service(settings: Settings, *, streaming: bool = False) -> Any:
     """Build the public help.sap.com grounding pipeline."""
     sdk = _sdk()
@@ -60,8 +111,14 @@ def build_help_grounded_service(settings: Settings, *, streaming: bool = False) 
 
 
 def run_help_grounded_query(query: str, settings: Settings) -> str:
-    response = build_help_grounded_service(settings).run(placeholder_values={"user_query": _required_query(query)})
-    return str(response.final_result.choices[0].message.content)
+    return run_help_grounded_query_with_trace(query, settings)["answer"]
+
+
+def run_help_grounded_query_with_trace(query: str, settings: Settings) -> dict[str, Any]:
+    response = build_help_grounded_service(settings).run(
+        placeholder_values={"user_query": _required_query(query)}
+    )
+    return _grounded_result(response, source="help.sap.com")
 
 
 def build_vector_grounded_service(settings: Settings, *, repository_id: str) -> Any:
@@ -89,10 +146,18 @@ def build_vector_grounded_service(settings: Settings, *, repository_id: str) -> 
 
 
 def run_vector_grounded_query(query: str, settings: Settings, *, repository_id: str) -> str:
+    return run_vector_grounded_query_with_trace(
+        query, settings, repository_id=repository_id
+    )["answer"]
+
+
+def run_vector_grounded_query_with_trace(
+    query: str, settings: Settings, *, repository_id: str
+) -> dict[str, Any]:
     response = build_vector_grounded_service(settings, repository_id=repository_id).run(
         placeholder_values={"user_query": _required_query(query)}
     )
-    return str(response.final_result.choices[0].message.content)
+    return _grounded_result(response, source=f"vector:{repository_id.strip()}")
 
 
 def stream_help_grounded_query(query: str, settings: Settings) -> Iterator[str]:

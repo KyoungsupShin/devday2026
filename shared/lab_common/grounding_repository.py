@@ -7,6 +7,7 @@ make the conversion explicit and keep document management easy to audit.
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping, Sequence
 from typing import Any
 from urllib.parse import quote
 
@@ -71,21 +72,40 @@ def upload_text_document(
     *,
     filename: str,
     text: str,
+    document_id: str | None = None,
+    metadata: Mapping[str, str | Sequence[str]] | None = None,
 ) -> dict[str, Any]:
-    """Upload one text/Markdown document to a vector repository."""
+    """Upload one text/Markdown document to a vector repository.
+
+    ``metadata`` is retained on both the document and its chunks so callers can
+    preserve an auditable source location (for example an Object Storage key).
+    """
     name = Path(filename).name.strip()
     if not name:
         raise ValueError("파일 이름이 필요합니다.")
+    identifier = (document_id or name).strip()
+    if not identifier:
+        raise ValueError("document ID가 필요합니다.")
+
+    source_metadata: list[dict[str, list[str]]] = []
+    for key, raw_value in (metadata or {}).items():
+        cleaned_key = str(key).strip()
+        if not cleaned_key or cleaned_key == "id":
+            continue
+        values = [str(value).strip() for value in (raw_value if isinstance(raw_value, Sequence) and not isinstance(raw_value, str) else [raw_value])]
+        values = [value for value in values if value]
+        if values:
+            source_metadata.append({"key": cleaned_key, "value": values})
     document_chunks = [
         {
             "content": content,
-            "metadata": [{"key": "chunk_index", "value": [str(index)]}],
+            "metadata": [{"key": "chunk_index", "value": [str(index)]}, *source_metadata],
         }
         for index, content in enumerate(_chunks(text), start=1)
     ]
     body = {
         "documents": [{
-            "metadata": [{"key": "id", "value": [name]}],
+            "metadata": [{"key": "id", "value": [identifier]}, *source_metadata],
             "chunks": document_chunks,
         }]
     }

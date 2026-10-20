@@ -20,6 +20,7 @@ from lab_common.config import load_settings
 from src.agent_loop_mcp.lab_core import run_food_mcp_loop
 from src.agent_to_agent.catalog import AGENT_URLS, DEFAULT_REQUEST
 from src.agent_to_agent.orchestration import run_handoff
+from src.agent_to_agent_advanced.catalog import AGENT_URLS as ADVANCED_AGENT_URLS
 from src.agent_workflow.lab_core import run_workflow
 
 
@@ -62,7 +63,9 @@ def _ensure_ports_available(urls: dict[str, str]) -> None:
         )
 
 
-def _run_local_a2a_servers(urls: dict[str, str] = AGENT_URLS) -> None:
+def _run_local_a2a_servers(
+    urls: dict[str, str] = AGENT_URLS, agent_command: str = "fnb-a2a-agent"
+) -> None:
     """Start all F&B A2A server processes and clean them up on Ctrl+C."""
     processes: list[subprocess.Popen[str]] = []
     try:
@@ -74,7 +77,7 @@ def _run_local_a2a_servers(urls: dict[str, str] = AGENT_URLS) -> None:
                     [
                         sys.executable,
                         str(PATTERN_ROOT / "main.py"),
-                        "fnb-a2a-agent",
+                        agent_command,
                         agent_id,
                         "--port",
                         port,
@@ -115,6 +118,13 @@ def _run_single_fnb_a2a_agent(agent_id: str, host: str, port: int) -> None:
     uvicorn.run(create_a2a_app(agent_id, f"http://{host}:{port}"), host=host, port=port)
 
 
+def _run_single_fnb_a2a_advanced_agent(agent_id: str, host: str, port: int) -> None:
+    import uvicorn
+    from src.agent_to_agent_advanced.server import create_a2a_app
+
+    uvicorn.run(create_a2a_app(agent_id, f"http://{host}:{port}"), host=host, port=port)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -147,16 +157,32 @@ def main() -> None:
         "fnb-a2a-local",
         help="start all local F&B A2A Agent servers",
     )
+    commands.add_parser(
+        "fnb-a2a-advanced-local",
+        help="04: start independent Advanced A2A Agent servers",
+    )
     fnb_agent_parser = commands.add_parser(
         "fnb-a2a-agent", help="start one F&B A2A Agent server"
     )
     fnb_agent_parser.add_argument("agent_id", choices=sorted(AGENT_URLS))
     fnb_agent_parser.add_argument("--host", default="127.0.0.1")
     fnb_agent_parser.add_argument("--port", type=int, required=True)
+    fnb_advanced_agent_parser = commands.add_parser(
+        "fnb-a2a-advanced-agent", help="start one Advanced A2A Agent server"
+    )
+    fnb_advanced_agent_parser.add_argument(
+        "agent_id", choices=sorted(ADVANCED_AGENT_URLS)
+    )
+    fnb_advanced_agent_parser.add_argument("--host", default="127.0.0.1")
+    fnb_advanced_agent_parser.add_argument("--port", type=int, required=True)
 
     args = parser.parse_args()
     if args.command == "workflow":
-        result = run_workflow(args.request, load_settings(), min_margin=args.min_margin)
+        result = run_workflow(
+            args.request,
+            load_settings(),
+            min_margin=args.min_margin,
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "loop":
         result = run_food_mcp_loop(args.request, load_settings())
@@ -166,8 +192,14 @@ def main() -> None:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "fnb-a2a-local":
         _run_local_a2a_servers()
+    elif args.command == "fnb-a2a-advanced-local":
+        _run_local_a2a_servers(
+            ADVANCED_AGENT_URLS, agent_command="fnb-a2a-advanced-agent"
+        )
     elif args.command == "fnb-a2a-agent":
         _run_single_fnb_a2a_agent(args.agent_id, args.host, args.port)
+    elif args.command == "fnb-a2a-advanced-agent":
+        _run_single_fnb_a2a_advanced_agent(args.agent_id, args.host, args.port)
 
 
 if __name__ == "__main__":

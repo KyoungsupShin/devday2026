@@ -56,6 +56,8 @@ class DecisionModelTests(unittest.TestCase):
         self.assertEqual(result.recommendation, "approve")
         self.assertEqual(result.engine, "llm_policy_btp_cohere_rerank")
         self.assertEqual(result.scores["approve"], 0.88)
+        self.assertEqual(result.policy_summary, "LLM 정책 근거 요약")
+        self.assertTrue(result.policy_id.startswith("sha256:"))
         self.assertFalse(result.requires_human_review)
         summary.assert_called_once()
         rerank.assert_called_once_with(
@@ -93,6 +95,8 @@ class DecisionModelTests(unittest.TestCase):
                 engine="fixture",
                 reason="fixture reason",
                 requires_human_review=False,
+                policy_summary="fixture policy summary",
+                policy_id="sha256:fixture",
             )
 
         outcome = run_decision_recommendation(
@@ -105,6 +109,11 @@ class DecisionModelTests(unittest.TestCase):
         self.assertEqual(outcome["recommendation_label"], "정상 고객")
         self.assertFalse(outcome["requires_human_review"])
         self.assertEqual(outcome["ranked_candidates"][0]["id"], "approve")
+        self.assertEqual(outcome["policy_summary"], "fixture policy summary")
+        self.assertEqual(outcome["policy_id"], "sha256:fixture")
+        self.assertEqual(
+            outcome["decision_thresholds"], {"min_score": 0.45, "min_margin": 0.12}
+        )
         self.assertIn("상태는 변경하지 않았습니다", outcome["action"])
         json.dumps(outcome)
 

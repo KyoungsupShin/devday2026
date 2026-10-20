@@ -50,6 +50,20 @@ class GroundingRepositoryTests(unittest.TestCase):
         self.assertEqual(len(post.call_args.kwargs["json"]["documents"][0]["chunks"]), 2)
 
     @patch("lab_common.grounding_repository.api_headers", return_value={})
+    @patch("lab_common.grounding_repository.requests.post")
+    def test_upload_preserves_custom_document_id_and_source_metadata(self, post, _headers):
+        post.return_value = Response({"status": "accepted"})
+        upload_text_document(
+            settings(), "repo", filename="guide.md", text="# guide",
+            document_id="s3://manuals/grounding/guide.md",
+            metadata={"source_type": "sap_btp_object_storage", "object_storage_key": "grounding/guide.md"},
+        )
+        document = post.call_args.kwargs["json"]["documents"][0]
+        self.assertEqual(document["metadata"][0]["value"], ["s3://manuals/grounding/guide.md"])
+        self.assertIn({"key": "object_storage_key", "value": ["grounding/guide.md"]}, document["metadata"])
+        self.assertIn({"key": "source_type", "value": ["sap_btp_object_storage"]}, document["chunks"][0]["metadata"])
+
+    @patch("lab_common.grounding_repository.api_headers", return_value={})
     @patch("lab_common.grounding_repository.requests.get")
     def test_list_documents_reads_resources(self, get, _headers):
         get.return_value = Response({"resources": [{"id": "document-1"}]})

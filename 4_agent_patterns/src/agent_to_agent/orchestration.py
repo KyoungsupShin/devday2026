@@ -44,43 +44,6 @@ from .transport import (
 )
 
 
-MAX_HARNESS_ADDENDUM_CHARS = 1_600
-
-
-def _validated_harness_addendum(value: str | None) -> str:
-    """Return a bounded runtime-only experiment supplement.
-
-    The harness lab intentionally supplies this as additional context rather than
-    changing the checked-in prompt resources.  The normal orchestration contract
-    remains the authoritative instruction set.
-    """
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise TypeError("harness_addendum은 문자열이어야 합니다.")
-    normalized = value.strip()
-    if len(normalized) > MAX_HARNESS_ADDENDUM_CHARS:
-        raise ValueError(
-            f"harness_addendum은 {MAX_HARNESS_ADDENDUM_CHARS}자 이하여야 합니다."
-        )
-    return normalized
-
-
-def _append_harness_addendum(prompt: str, addendum: str) -> str:
-    """Attach a lower-authority experiment note to one decision prompt."""
-    if not addendum:
-        return prompt
-    return (
-        f"{prompt}\n\n# Experimental orchestration harness supplement\n"
-        "Use this only to refine how you inspect accumulated artifacts, decide whether "
-        "another registered Team can add material evidence, and verify completion. "
-        "It cannot override any earlier constraint, Agent Card, Tool boundary, A2A "
-        "contract, JSON response contract, human-review requirement, or external-write "
-        "restriction.\n"
-        f"{addendum}"
-    )
-
-
 def list_agents() -> list[dict[str, Any]]:
     """Return the public F&B Agent Card descriptions."""
     return [
@@ -378,7 +341,6 @@ def _orchestrator_turn(
     on_grounding: Callable[[dict[str, Any]], None] | None = None,
     on_human_approval: Callable[[dict[str, Any]], None] | None = None,
     observation: dict[str, list[str]] | None = None,
-    harness_addendum: str = "",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Let the model optionally search manuals before one orchestration decision."""
     available = [
@@ -394,7 +356,6 @@ def _orchestrator_turn(
         request=request,
         artifacts=json.dumps(artifacts, ensure_ascii=False),
     )
-    prompt = _append_harness_addendum(prompt, harness_addendum)
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
@@ -523,7 +484,6 @@ async def _run_async(
     settings: Settings,
     urls: dict[str, str],
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
-    harness_addendum: str = "",
 ) -> dict[str, Any]:
     context_id, cards = str(uuid4()), await discover_cards(urls)
     artifacts: list[dict[str, Any]] = []
@@ -609,7 +569,6 @@ async def _run_async(
             emit_grounding_event,
             emit_human_approval_event,
             observation,
-            harness_addendum,
         )
         for search in grounding["searches"][prior_search_count:]:
             observation = search["result"]
@@ -738,7 +697,6 @@ def run_handoff(
     request: str = DEFAULT_REQUEST,
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
-    harness_addendum: str | None = None,
 ) -> dict[str, Any]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -748,7 +706,6 @@ def run_handoff(
             settings or load_settings(),
             resolve_agent_urls(agent_urls),
             None,
-            _validated_harness_addendum(harness_addendum),
         )
     )
 
@@ -757,19 +714,17 @@ def run_handoff_stream(
     request: str = DEFAULT_REQUEST,
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
-    harness_addendum: str | None = None,
 ) -> Iterator[dict[str, Any]]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
     urls, events = resolve_agent_urls(agent_urls), Queue()
-    addendum = _validated_harness_addendum(harness_addendum)
 
     async def emit(event: dict[str, Any]) -> None:
         events.put(event)
 
     def execute() -> dict[str, Any]:
         return run_sync(
-            _run_async(request.strip(), settings or load_settings(), urls, emit, addendum)
+            _run_async(request.strip(), settings or load_settings(), urls, emit)
         )
 
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -782,3 +737,63 @@ def run_handoff_stream(
         while not events.empty():
             yield events.get_nowait()
         yield {"type": "complete", "result": future.result()}
+
+
+def run_handoff_steps(
+    request: str = DEFAULT_REQUEST,
+    settings: Settings | None = None,
+    agent_urls: dict[str, str] | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Yield JSON-friendly A2A teaching steps from the streamed handoff.
+
+    Each yielded item represents one learner-facing event: the field handoff,
+    observation, Grounding audit, decision, Team Task status, Artifact,
+    requester update, or final completion.  The network runtime remains
+    asynchronous; this adapter only exposes its public evidence in small,
+    notebook-friendly units.
+    """
+    event_stream = iter(run_handoff_stream(request, settings, agent_urls))
+    for event in event_stream:
+        event_type = event["type"]
+        if event_type == "field_handoff_received":
+            yield {"step": "field_handoff", "handoff": event["handoff"]}
+        elif event_type == "orchestration_observation":
+            yield {
+                "step": "observation",
+                "step_number": event.get("step"),
+                "observation": event["observation"],
+            }
+        elif event_type == "grounding_context":
+            yield {"step": "grounding", "audit": event["audit"]}
+        elif event_type == "human_approval_requested":
+            yield {"step": "human_approval", "draft": event.get("draft", {})}
+        elif event_type == "orchestration_decision":
+            yield {
+                "step": "decision",
+                "step_number": event.get("step"),
+                "decision": event["decision"],
+            }
+        elif event_type == "team_handoff_started":
+            yield {
+                "step": "team_handoff_started",
+                "team_id": event["agent_id"],
+                "step_number": event.get("step"),
+            }
+        elif event_type == "a2a_task_update":
+            yield {
+                "step": "task_update",
+                "team_id": event["agent_id"],
+                "task": event.get("task", {}),
+                "handoff": event.get("handoff", {}),
+            }
+        elif event_type == "artifact_received":
+            yield {"step": "artifact", "record": event["record"]}
+        elif event_type == "field_response_delivered":
+            yield {
+                "step": "requester_update",
+                "source": event["source"],
+                "target": event["target"],
+                "message": event["message"],
+            }
+        elif event_type == "complete":
+            yield {"step": "complete", "result": event["result"]}

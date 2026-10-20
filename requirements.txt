@@ -1,16 +1,24 @@
+# SAP BTP AI Core / Gen AI Hub
 sap-ai-sdk-gen>=7.4.1,<8
 sap-ai-sdk-core>=3.5,<4
 google-cloud-aiplatform==1.113.0
 openai>=1.0,<3
 requests>=2.32,<3
 python-dotenv>=1.0,<2
+
+# Jupyter hands-on and local UI
 jupyterlab>=4,<5
 ipykernel>=6,<7
+gradio>=5,<6
+mistune>=3,<4
+
+# Embeddings and tabular fixture analysis
 pandas>=2,<3
 numpy>=1.26,<3
 scipy>=1.14,<2
-gradio>=5,<6
-mistune>=3,<4
+
+# Agent-to-Agent local servers and optional service adapters
 a2a-sdk[fastapi]>=1.2,<2
 hdbcli>=2.30,<3
+boto3>=1.35,<2
 

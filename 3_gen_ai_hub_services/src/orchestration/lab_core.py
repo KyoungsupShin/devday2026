@@ -11,6 +11,9 @@ from lab_common.ai_core import (
 from lab_common.config import Settings
 
 
+_REGISTRY_CONFIG_PATH = "/registry/v2/orchestrationConfigs"
+
+
 def _sdk() -> dict[str, Any]:
     try:
         from gen_ai_hub.orchestration_v2.models.config import (
@@ -29,13 +32,16 @@ def _answer(result: Any) -> str:
     return str(result.final_result.choices[0].message.content)
 
 
-def _registry_client() -> Any:
+def _registry_client(settings: Settings | None = None) -> Any:
+    """Create a Prompt Registry client using the configured AI Core credentials."""
     try:
         from gen_ai_hub.prompt_registry.client import OrchestrationConfigClient
     except ImportError as error:
         raise RuntimeError(
             "Orchestration Config Registry에는 sap-ai-sdk-gen>=7.4,<8가 필요합니다. requirements.txt를 설치하세요."
         ) from error
+    if settings is not None:
+        apply_ai_core_environment(settings)
     return OrchestrationConfigClient()
 
 
@@ -60,76 +66,53 @@ def _json_value(value: Any) -> Any:
     return str(value)
 
 
-def build_saved_orchestration_spec(
-    settings: Settings, *, system_prompt: str, user_prompt: str = "{{?user_query}}",
-    model: str | None = None, max_tokens: int = 700,
-) -> Any:
-    """Build one Prompt Registry-ready spec without writing it."""
-    system = _required(system_prompt, "System prompt")
-    user = _required(user_prompt, "User prompt")
-    if "{{?user_query}}" not in user:
-        raise ValueError("User prompt에는 {{?user_query}} placeholder가 필요합니다.")
-    if max_tokens < 1:
-        raise ValueError("max_tokens는 1 이상이어야 합니다.")
-    sdk = _sdk()
-    template = sdk["Template"](template=[
-        sdk["SystemMessage"](content=system), sdk["UserMessage"](content=user),
-    ])
-    prompt = sdk["PromptTemplatingModuleConfig"](
-        prompt=template,
-        model=sdk["LLMModelDetails"](name=(model or settings.llm_model).strip(), params=llm_model_params(settings, max_tokens=max_tokens)),
+def _registry_get(client: Any, path: str, *, params: dict[str, Any]) -> Any:
+    """Read Registry JSON without deserializing it through SDK config models.
+
+    Registry can return new Orchestration module fields before the installed SDK
+    models are updated.  Listing and displaying a saved configuration only need
+    the service response; strict SDK deserialization would reject those fields.
+    Injected test clients retain the typed SDK method fallback.
+    """
+    rest_client = getattr(client, "rest_client", None)
+    if rest_client is not None:
+        return rest_client.get(path=path, params=params, convert_params_to_camel_case=False)
+    if path == _REGISTRY_CONFIG_PATH:
+        return client.get_orchestration_configs(**params)
+    config_id = path.rsplit("/", 1)[-1]
+    return client.get_orchestration_config_by_id(
+        config_id, resolve_template_ref=params["resolve_template_ref"]
     )
-    return sdk["OrchestrationConfig"](modules=sdk["ModuleConfig"](prompt_templating=prompt))
 
 
-def preview_saved_orchestration_spec(
-    settings: Settings, *, system_prompt: str, user_prompt: str = "{{?user_query}}",
-    model: str | None = None, max_tokens: int = 700,
+def get_orchestration_config(
+    config_id: str, *, settings: Settings | None = None, registry_client: Any | None = None,
 ) -> dict[str, Any]:
-    return _json_value(build_saved_orchestration_spec(
-        settings, system_prompt=system_prompt, user_prompt=user_prompt, model=model, max_tokens=max_tokens
-    ))
-
-
-def save_orchestration_config(
-    settings: Settings, *, name: str, version: str, scenario: str, system_prompt: str,
-    user_prompt: str = "{{?user_query}}", model: str | None = None, max_tokens: int = 700,
-    registry_client: Any | None = None,
-) -> dict[str, Any]:
-    """Create or update a Prompt Registry orchestration config."""
-    spec = build_saved_orchestration_spec(
-        settings, system_prompt=system_prompt, user_prompt=user_prompt, model=model, max_tokens=max_tokens
-    )
-    response = (registry_client or _registry_client()).create_orchestration_config(
-        name=_required(name, "Config name"), version=_required(version, "Version"),
-        scenario=_required(scenario, "Scenario"), spec=spec,
-    )
-    return {
-        "operation": "saved", "id": str(response.id), "name": str(response.name),
-        "version": str(response.version), "scenario": str(response.scenario), "message": str(response.message),
-    }
-
-
-def get_orchestration_config(config_id: str, *, registry_client: Any | None = None) -> dict[str, Any]:
-    return _json_value((registry_client or _registry_client()).get_orchestration_config_by_id(
-        _required(config_id, "Config ID"), resolve_template_ref=True
+    selected_id = _required(config_id, "Config ID")
+    client = registry_client or _registry_client(settings)
+    return _json_value(_registry_get(
+        client, f"{_REGISTRY_CONFIG_PATH}/{selected_id}", params={"resolve_template_ref": True}
     ))
 
 
 def list_orchestration_configs(
-    *, scenario: str, name: str, version: str, include_spec: bool = False, registry_client: Any | None = None,
+    *, scenario: str | None = None, name: str | None = None, version: str | None = None,
+    include_spec: bool = False, settings: Settings | None = None, registry_client: Any | None = None,
 ) -> dict[str, Any]:
-    response = (registry_client or _registry_client()).get_orchestration_configs(
-        scenario=_required(scenario, "Scenario"), name=_required(name, "Config name"),
-        version=_required(version, "Version"), include_spec=include_spec, resolve_template_ref=include_spec,
+    """List registered orchestration configs, optionally narrowed by registry fields."""
+    response = _registry_get(
+        registry_client or _registry_client(settings), _REGISTRY_CONFIG_PATH, params={
+            "scenario": scenario.strip() if scenario and scenario.strip() else None,
+            "name": name.strip() if name and name.strip() else None,
+            "version": version.strip() if version and version.strip() else None,
+            "include_spec": include_spec,
+            "resolve_template_ref": include_spec,
+        }
     )
+    if isinstance(response, dict):
+        resources = response.get("resources", [])
+        return {"count": int(response.get("count", len(resources))), "resources": _json_value(resources)}
     return {"count": int(response.count), "resources": _json_value(response.resources)}
-
-
-def delete_orchestration_config(config_id: str, *, registry_client: Any | None = None) -> dict[str, Any]:
-    selected_id = _required(config_id, "Config ID")
-    response = (registry_client or _registry_client()).delete_orchestration_config_by_id(selected_id)
-    return {"operation": "deleted", "id": selected_id, "message": str(response.message)}
 
 
 def invoke_saved_orchestration_config(

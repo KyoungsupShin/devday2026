@@ -87,3 +87,76 @@ def compare_embeddings(
         "texts": cleaned,
         "comparisons": comparisons,
     }
+
+
+def retrieve_similar_texts(
+    query: str,
+    documents: Sequence[str],
+    settings: Settings,
+    *,
+    top_k: int = 3,
+    min_similarity: float | None = None,
+    model: str | None = None,
+    embedder: Callable[[Sequence[str], Settings, str | None], np.ndarray] = embed_texts,
+) -> dict[str, object]:
+    """Rank documents by cosine similarity to one query in a single batch call."""
+    cleaned_query = query.strip() if isinstance(query, str) else ""
+    cleaned_documents = [
+        document.strip() if isinstance(document, str) else ""
+        for document in documents
+    ]
+    if not cleaned_query:
+        raise ValueError("검색 질문을 입력하세요.")
+    if not cleaned_documents:
+        raise ValueError("검색할 문서를 한 개 이상 입력하세요.")
+    if any(not document for document in cleaned_documents):
+        raise ValueError("검색할 문서에는 빈 값을 넣을 수 없습니다.")
+    if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k < 1:
+        raise ValueError("top_k는 1 이상의 정수여야 합니다.")
+    if min_similarity is not None and not -1 <= min_similarity <= 1:
+        raise ValueError("min_similarity는 -1과 1 사이여야 합니다.")
+
+    selected_model = (
+        model.strip()
+        if model and model.strip()
+        else os.getenv("EMBED_MODEL", "text-embedding-3-small")
+    )
+    vectors = np.asarray(
+        embedder([cleaned_query, *cleaned_documents], settings, selected_model),
+        dtype=np.float64,
+    )
+    if vectors.ndim != 2 or vectors.shape[1] == 0:
+        raise ValueError("embedding 결과는 비어 있지 않은 2D vector여야 합니다.")
+    if len(vectors) != len(cleaned_documents) + 1:
+        raise ValueError("embedding 결과 수가 입력 텍스트 수와 다릅니다.")
+
+    scored = [
+        {
+            "document_index": index,
+            "document": document,
+            "cosine_similarity": cosine_similarity(vectors[0], vectors[index + 1]),
+        }
+        for index, document in enumerate(cleaned_documents)
+    ]
+    ranked = sorted(
+        scored,
+        key=lambda item: (-float(item["cosine_similarity"]), int(item["document_index"])),
+    )
+    if min_similarity is not None:
+        ranked = [
+            item
+            for item in ranked
+            if float(item["cosine_similarity"]) >= min_similarity
+        ]
+    results = [
+        {**item, "rank": rank}
+        for rank, item in enumerate(ranked[:top_k], start=1)
+    ]
+    return {
+        "model": selected_model,
+        "dimensions": int(vectors.shape[1]),
+        "query": cleaned_query,
+        "candidate_count": len(cleaned_documents),
+        "min_similarity": min_similarity,
+        "results": results,
+    }

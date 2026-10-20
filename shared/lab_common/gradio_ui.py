@@ -90,8 +90,19 @@ def deployment_summary() -> str:
         return f"연결 확인 실패: {type(error).__name__}: {error}"
     if not deployments:
         return "RUNNING deployment가 없습니다."
+
+    def model_name(deployment: dict[str, Any]) -> str:
+        return str(
+            deployment.get("details", {})
+            .get("resources", {})
+            .get("backend_details", {})
+            .get("model", {})
+            .get("name", "")
+        )
+
     return "\n".join(
-        f"- {item.get('scenarioId', 'unknown')} | {item.get('status')} | {item.get('deploymentUrl', '')}"
+        f"- {model_name(item) or '(model name unavailable)'} | "
+        f"{item.get('scenarioId', 'unknown')} | {item.get('status')}"
         for item in deployments
     )
 

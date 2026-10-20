@@ -9,31 +9,57 @@ from typing import Any
 
 import gradio as gr
 import mistune
-from lab_common.ai_core import chat_text
 from lab_common.config import Settings, load_settings
 
 from .food_agents import FOOD_AGENT_DEFINITIONS
-from .food_tools import (
-    latest_marketing_html_draft,
-    marketing_image_asset,
-    tool_catalog_for_food_agent,
-)
-from .lab_core import build_contextual_request, run_workflow_stream
-
-STEP_META = {
-    "fast_route": ("①", "빠른 경로 판별"),
-    "agent_started": ("②", "Agent 실행 시작"),
-    "agent_completed": ("③", "Agent 응답 완료"),
-    "chat_response": ("②", "Chat response"),
-    "evaluation_started": ("④", "Execution 평가"),
-    "evaluation_completed": ("⑤", "평가 완료"),
-    "revision_started": ("⑥", "보완 실행"),
-}
+from .lab_core import run_workflow_stream
 
 DEFAULT_WORKFLOW_REQUEST = (
     "편의점용 고단백 닭가슴살 도시락을 출시하려고 합니다. 판매가 4,500원, 단백질 30g 이상, "
     "전자레인지 조리 가능 조건으로 콘셉트·레시피·원가·공급망·식품안전·마케팅·손익분기점을 "
     "종합 검토해 출시 권고안을 작성해주세요. 모든 수치에는 가정을 표시해주세요."
+)
+
+WORKFLOW_SCENARIOS = (
+    {
+        "title": "신제품 출시 Go / No-Go",
+        "focus": "R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "수도권 편의점 1,200개 점포에 320g 고단백 닭가슴살 도시락을 12주간 출시하려 합니다. 조건은 판매가 4,500원, 단백질 30g 이상, 나트륨 1,200mg 이하, 냉장 0~5°C·소비기한 21일, 목표 제조원가 2,500원 이하입니다. R&D 레시피·공정, 구매 원가·공급 안정성, QA 안전·표시, 마케팅 타깃·메시지, 재무 손익분기점을 검토하고, 핵심 가정·3대 위험·Go / No-Go 결론을 포함한 출시 권고안을 작성해줘.",
+        "history": [],
+    },
+    {
+        "title": "4,900원 가격 설계",
+        "focus": "R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "20~30대 직장인용 저당 고단백 도시락의 가격안을 결정해야 합니다. 330g, 단백질 32g 이상, 당류 8g 이하, 4주 냉장 유통을 전제로 4,900원과 5,500원 중 하나를 선택해줘. 목표 공헌이익률은 35% 이상이며, 점포당 하루 8개 판매를 가정합니다. R&D 레시피·포장, 구매 단가·대체 원료, QA 표시·보관 제약, 마케팅 고객가치·경쟁 포인트, 재무 원가·손익분기점을 비교해 SKU·권장 판매가·실행 조건을 표 형식으로 종합해줘.",
+        "history": [],
+    },
+    {
+        "title": "냉장 유통 리스크 대응",
+        "focus": "R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "수도권 물류센터 2곳에서 편의점 800개 점포로 냉장 도시락을 공급합니다. 여름철 배송 중 5°C 초과가 최대 2시간 발생할 수 있고, 폐기율은 3% 이하로 유지해야 하며 소비기한은 21일입니다. R&D의 공정·포장 보완, 구매의 콜드체인·대체 공급처, QA의 미생물·온도 이탈 관리, 마케팅의 고객 안내, 재무의 폐기·물류비 영향을 검토해줘. 출시 연기·조건부 출시·즉시 출시 중 하나를 고르고 30·60·90일 조치계획을 제시해줘.",
+        "history": [],
+    },
+    {
+        "title": "원재료 인상 후 재출시",
+        "focus": "Observer · R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "기존 프로틴 런치의 닭가슴살 원가가 15% 올랐고, 현재 판매가 4,500원·단백질 30g·320g 구성·목표 공헌이익률 30%는 유지해야 합니다. 레시피를 바꾸면 단백질과 표시 기준을 유지해야 하며, 가격 인상은 최대 300원까지만 허용됩니다. R&D의 배합 대안, 구매의 대체 공급처·MOQ, QA의 알레르겐·표시 영향, 마케팅의 가격 인상 메시지, 재무의 이익 회복 효과를 비교해 재출시안 2개와 최종 권고안을 제시해줘.",
+        "history": [
+            {"role": "user", "content": "프로틴 런치는 단백질 30g, 판매가 4,500원인 편의점용 냉장 도시락으로 기획했어."},
+            {"role": "assistant", "content": "프로틴 런치의 제품 콘셉트와 출시 메시지 초안을 만들었습니다."},
+        ],
+    },
+    {
+        "title": "알레르겐 리뉴얼 의사결정",
+        "focus": "R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "기존 도시락의 땅콩 함유 소스로 인해 학교·오피스 채널 입점이 거절되었습니다. 판매가 4,900원과 단백질 30g은 유지해야 하고, 리뉴얼 후 목표 제조원가는 2,600원 이하입니다. R&D는 땅콩 없는 대체 소스 2안을, 구매는 원료 수급·최소주문수량을, QA는 교차오염·표시·검증 항목을, 마케팅은 채널별 메시지를, 재무는 전환 비용·추가 매출을 평가해줘. 즉시 리뉴얼·파일럿 후 리뉴얼·유지 중 하나를 선택하고 단계별 의사결정 기준을 제시해줘.",
+        "history": [],
+    },
+    {
+        "title": "여름 한정 샐러드 출시",
+        "focus": "R&D · 구매 · QA · 마케팅 · 재무 · Synthesis",
+        "request": "6~7월 6주 동안 편의점 600개 점포에서 250g 고단백 닭가슴살 샐러드를 한정 출시합니다. 판매가 5,900원, 단백질 25g 이상, 목표 판매량은 점포당 하루 5개, 폐기율 한도는 5%, 냉장 소비기한은 5일입니다. R&D는 제품·소스·공정, 구매는 채소 계절성·대체 조달, QA는 세척·미생물·냉장 관리, 마케팅은 타깃·채널·프로모션, 재무는 원가·판매목표·손익을 제안해줘. 성공 KPI와 조기 종료 기준까지 포함한 한정 출시 실행안을 종합해줘.",
+        "history": [],
+    },
 )
 
 DEBUG_LOG_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "debug" / "latest_workflow_conversation.json"
@@ -42,7 +68,7 @@ DEBUG_LOG_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "debug" / "
 def write_latest_workflow_debug_log(snapshot: dict[str, Any], path: Path = DEBUG_LOG_PATH) -> Path:
     """Atomically replace the latest UI conversation snapshot for local debugging.
 
-    The snapshot deliberately contains prompts, responses, trace and tool metadata,
+    The snapshot deliberately contains prompts, responses, trace and Agent metadata,
     but never `Settings`, environment variables, or credentials.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,40 +96,21 @@ def _plain_conversation_history(history: list[dict[str, Any]] | None) -> list[di
     return plain
 
 
-def _html_tool_draft_created(tool_calls: list[dict[str, Any]]) -> bool:
-    """Detect a draft artifact without placing its potentially large image in trace data."""
-    return any(
-        isinstance(call, dict)
-        and call.get("name") == "generate_marketing_html"
-        and isinstance(call.get("result"), dict)
-        and call["result"].get("html_draft_created") is True
-        for call in tool_calls
+def _scenario_card_html(scenario: dict[str, Any]) -> str:
+    """Render one selectable educational scenario without embedding button logic."""
+    return (
+        '<article class="workflow-scenario-card__body">'
+        f'<p class="workflow-scenario-card__focus">{html.escape(str(scenario["focus"]))}</p>'
+        f'<h4>{html.escape(str(scenario["title"]))}</h4>'
+        '<section class="workflow-scenario-card__request">'
+        '<span>사용자 요청</span>'
+        f'<p>{html.escape(str(scenario["request"]))}</p>'
+        '</section>'
+        '</article>'
     )
 
-
-def _agent_tool_catalog_panel(agent_id: str) -> str:
-    """Render the selected Agent's assigned local MCP-style tool contracts."""
-    agent = next((item for item in FOOD_AGENT_DEFINITIONS if item.id == agent_id), None)
-    if agent is None:
-        return '<p style="color:#b3261e">선택한 Agent를 찾을 수 없습니다.</p>'
-    tools = tool_catalog_for_food_agent(agent_id)
-    tool_cards = "".join(
-        f'''<article class="agent-tool-catalog__tool">
-          <div><code>{html.escape(tool["name"])}</code><span>{html.escape(tool["type"])}</span></div>
-          <p>{html.escape(tool["description"])}</p>
-        </article>'''
-        for tool in tools
-    ) or '<p class="agent-tool-catalog__empty">연결된 MCP-style 도구가 없습니다.</p>'
-    return f'''<section class="agent-tool-catalog">
-      <p class="agent-tool-catalog__eyebrow">Agent</p>
-      <h3>{html.escape(agent.label)}</h3>
-      <p class="agent-tool-catalog__description">{html.escape(agent.description)}</p>
-      <p class="agent-tool-catalog__boundary">MCP lesson의 로컬 읽기 전용 Tool Calling 계약입니다. Agent가 필요하다고 판단할 때만 호출합니다.</p>
-      <div class="agent-tool-catalog__tools">{tool_cards}</div>
-    </section>'''
-
 WORKFLOW_GRAPH_SVG = """
-<svg viewBox="0 0 1420 410" width="86%" style="display:block;margin:0 auto" role="img" aria-label="LLM-orchestrated agent workflow with evaluation middleware" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1420 410" width="86%" style="display:block;margin:0 auto" role="img" aria-label="LLM-orchestrated agent workflow with final synthesis" xmlns="http://www.w3.org/2000/svg">
   <style>.node{fill:#fff;stroke:#8ab4f8;stroke-width:2}.work{fill:#f8fbff;stroke:#4285f4;stroke-width:2}.end{fill:#e6f4ea;stroke:#34a853;stroke-width:2}.label{font:600 15px sans-serif;fill:#202124}.small{font:13px sans-serif;fill:#5f6368}.edge{fill:none;stroke:#5f6368;stroke-width:2;marker-end:url(#arrow)}</style>
   <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#5f6368"/></marker></defs>
   <text x="26" y="31" class="label" style="font-size:18px">LLM-Orchestrated Food Workflow</text>
@@ -111,10 +118,10 @@ WORKFLOW_GRAPH_SVG = """
   <rect x="240" y="155" width="180" height="94" rx="12" class="work"/><text x="330" y="190" text-anchor="middle" class="label">Cohere Rerank</text><text x="330" y="213" text-anchor="middle" class="small">Chat / Work</text>
   <rect x="500" y="57" width="175" height="64" rx="12" class="end"/><text x="587" y="85" text-anchor="middle" class="label">Chat response</text><text x="587" y="105" text-anchor="middle" class="small">direct response</text>
   <rect x="500" y="270" width="175" height="76" rx="12" class="work"/><text x="587" y="300" text-anchor="middle" class="label">Work Planning Agents</text><text x="587" y="323" text-anchor="middle" class="small">LLM orchestrator</text>
-  <rect x="755" y="250" width="210" height="115" rx="12" class="node"/><text x="860" y="280" text-anchor="middle" class="label">Selected Specialists</text><text x="860" y="305" text-anchor="middle" class="small">LLM-selected agents</text><text x="860" y="327" text-anchor="middle" class="small">ordered parallel stages</text>
-  <rect x="1020" y="250" width="190" height="115" rx="12" class="work"/><text x="1115" y="278" text-anchor="middle" class="label">Evaluation Middleware</text><text x="1115" y="303" text-anchor="middle" class="small">LLM result + Tool audit</text><text x="1115" y="325" text-anchor="middle" class="small">pass / revise · max 3</text>
-  <rect x="1265" y="270" width="130" height="76" rx="12" class="end"/><text x="1330" y="300" text-anchor="middle" class="label">Result</text><text x="1330" y="323" text-anchor="middle" class="small">approved output</text>
-  <path d="M175 202 H240" class="edge"/><path d="M420 177 C450 177 450 89 500 89" class="edge"/><text x="444" y="118" class="small">chat</text><path d="M420 225 C450 225 450 308 500 308" class="edge"/><text x="440" y="271" class="small">work</text><path d="M675 308 H755" class="edge"/><path d="M965 308 H1020" class="edge"/><path d="M1210 308 H1265" class="edge"/><text x="1225" y="294" class="small">pass</text><path d="M1115 365 C1115 405 860 405 860 365" class="edge"/><text x="962" y="400" class="small">revise · max 3</text>
+  <rect x="755" y="250" width="210" height="115" rx="12" class="node"/><text x="860" y="280" text-anchor="middle" class="label">Selected Agents</text><text x="860" y="305" text-anchor="middle" class="small">LLM-selected plan</text><text x="860" y="327" text-anchor="middle" class="small">ordered stages</text>
+  <rect x="1020" y="270" width="190" height="76" rx="12" class="work"/><text x="1115" y="300" text-anchor="middle" class="label">Final Agent</text><text x="1115" y="323" text-anchor="middle" class="small">chosen by plan</text>
+  <rect x="1265" y="270" width="130" height="76" rx="12" class="end"/><text x="1330" y="300" text-anchor="middle" class="label">Result</text><text x="1330" y="323" text-anchor="middle" class="small">final output</text>
+  <path d="M175 202 H240" class="edge"/><path d="M420 177 C450 177 450 89 500 89" class="edge"/><text x="444" y="118" class="small">chat</text><path d="M420 225 C450 225 450 308 500 308" class="edge"/><text x="440" y="271" class="small">work</text><path d="M675 308 H755" class="edge"/><path d="M965 308 H1020" class="edge"/><path d="M1210 308 H1265" class="edge"/>
 </svg>
 """
 
@@ -126,25 +133,6 @@ SETTINGS_MODAL_CSS = """
   box-shadow: 0 18px 60px rgba(0,0,0,.22) !important;
 }
 
-#agent-tool-modal {
-  position: fixed !important; inset: 8vh 12vw auto !important; z-index: 1000 !important;
-  max-width: 1040px !important; max-height: 82vh; overflow: auto; padding: 20px !important;
-  border: 1px solid #d0d7de !important; border-radius: 14px !important; background: white !important;
-  box-shadow: 0 18px 60px rgba(0,0,0,.22) !important;
-}
-#agent-tool-modal .agent-tool-catalog { padding: 4px 8px; }
-#agent-tool-modal .agent-tool-catalog__eyebrow { margin:0 0 4px; color:#174ea6; font-size:12px; font-weight:700; text-transform:uppercase; }
-#agent-tool-modal .agent-tool-catalog h3 { margin:0; color:#202124; font-size:22px; }
-#agent-tool-modal .agent-tool-catalog__description { margin:8px 0; color:#374151; line-height:1.5; }
-#agent-tool-modal .agent-tool-catalog__boundary, #agent-tool-modal .agent-tool-catalog__note { margin:10px 0; padding:9px 10px; border-radius:8px; background:#f8fbff; color:#5f6368; font-size:13px; line-height:1.45; }
-#agent-tool-modal .agent-tool-catalog__tools { display:grid; gap:9px; margin-top:14px; }
-#agent-tool-modal .agent-tool-catalog__tool { padding:11px 12px; border:1px solid #f2c46d; border-radius:9px; background:#fffdf5; }
-#agent-tool-modal .agent-tool-catalog__tool div { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-#agent-tool-modal .agent-tool-catalog__tool code { color:#855d00; font-weight:700; }
-#agent-tool-modal .agent-tool-catalog__tool span { padding:2px 6px; border-radius:999px; background:#fff1c7; color:#855d00; font-size:11px; white-space:nowrap; }
-#agent-tool-modal .agent-tool-catalog__tool p { margin:7px 0 0; color:#374151; font-size:13px; line-height:1.45; }
-#agent-tool-modal .agent-tool-catalog__empty { color:#6b7280; }
-@media (max-width: 700px) { #agent-tool-modal { inset:4vh 4vw auto !important; } }
 
 .agent-dashboard { padding: 14px; border: 1px solid #c7d2e1; border-radius: 12px; background: #f8fbff; }
 .agent-dashboard__header { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:10px; }
@@ -179,19 +167,33 @@ SETTINGS_MODAL_CSS = """
 .workflow-final-answer__title { margin-bottom:8px; color:#174ea6; font-size:12px; font-weight:700; }
 """
 
+SETTINGS_MODAL_CSS += """
+#workflow-scenario-card-grid { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px !important; align-items:stretch; }
+#workflow-scenario-card-grid > .gr-column { min-width:0 !important; flex:initial !important; }
+.workflow-scenario-card { gap:0 !important; min-width:0 !important; border:1px solid #c9d9e7; border-radius:12px; background:#fff; box-shadow:0 1px 2px rgba(40,58,74,.08); overflow:hidden; }
+.workflow-scenario-card__body { min-height:174px; padding:15px 15px 11px; background:linear-gradient(145deg,#f9fcff,#eef5fb); color:#25313d; }
+.workflow-scenario-card__focus { margin:0 0 6px; color:#5b7b99; font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.workflow-scenario-card__body h4 { margin:0 0 12px; color:#274761; font-size:15px; line-height:1.35; }
+.workflow-scenario-card__request { padding:10px; border:1px solid #e1e9f0; border-radius:8px; background:rgba(255,255,255,.8); }
+.workflow-scenario-card__request span { color:#71869b; font-size:10px; font-weight:800; letter-spacing:.04em; }
+.workflow-scenario-card__request p { margin:5px 0 0; color:#425d73; font-size:12px; line-height:1.55; word-break:keep-all; }
+.workflow-scenario-card button { width:calc(100% - 24px) !important; min-height:34px; margin:0 12px 12px !important; border:1px solid #769bbc !important; border-radius:8px !important; background:#fff !important; color:#315a7b !important; font-size:12px !important; font-weight:800 !important; }
+.workflow-scenario-card button:hover { border-color:#3f78a5 !important; background:#edf6ff !important; color:#1d4f78 !important; }
+@media(max-width:900px) { #workflow-scenario-card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:700px) { #workflow-scenario-card-grid { grid-template-columns:1fr; } .workflow-scenario-card__body { min-height:0; } }
+"""
+
 _AGENT_MARKDOWN = mistune.create_markdown(escape=True, plugins=["table", "strikethrough"])
 
 
 def _status_timeline(
     trace: list[dict[str, Any]],
     running: bool = False,
-    show_tool_calling: bool = False,
     collapsed: bool = False,
 ) -> gr.HTML:
     """Render one evolving timeline row per Agent, rather than start/completion pairs."""
     items: list[dict[str, str]] = []
     agent_item_index: dict[str, int] = {}
-    evaluation_item_index: int | None = None
     for event in trace:
         event_name = event["event"]
         data = event.get("payload", event.get("data", {}))
@@ -201,32 +203,27 @@ def _status_timeline(
                 detail += f' <span style="color:#6b7280">· {html.escape(str(data["engine"]))}</span>'
             if data.get("low_confidence"):
                 detail += ' <span style="color:#b45309">· 낮은 신뢰도</span>'
-            items.append({"icon": "①", "title": "빠른 경로 판별", "detail": detail})
+            items.append({"icon": "①", "title": "Cohere Rerank", "detail": detail})
+            continue
+        if event_name == "orchestration_plan":
+            final_agent_id = html.escape(str(data.get("final_agent_id", "")))
+            items.append({"icon": "②", "title": "실행 계획", "detail": f"최종 Agent · {final_agent_id}"})
             continue
         if event_name == "agent_started":
             agent_id = str(data["agent_id"])
             agent_item_index[agent_id] = len(items)
             items.append({
-                "icon": "②",
+                "icon": "③",
                 "title": "Agent 실행",
                 "detail": f'{html.escape(str(data["label"]))} <span style="color:#b45309">· 실행 중</span>',
             })
             continue
         if event_name == "agent_completed":
             agent_id = str(data["agent_id"])
-            tool_detail = ""
-            if show_tool_calling and data.get("tool_calls"):
-                names = ", ".join(
-                    html.escape(str(call.get("name", "Tool")))
-                    for call in data["tool_calls"]
-                    if isinstance(call, dict)
-                )
-                if names:
-                    tool_detail = f' <span style="color:#6b7280">· Tool: {names}</span>'
             completed_item = {
-                "icon": "③",
+                "icon": "④",
                 "title": "Agent 완료",
-                "detail": f'{html.escape(str(data["label"]))} <span style="color:#137333">· 완료</span>{tool_detail}',
+                "detail": f'{html.escape(str(data["label"]))} <span style="color:#137333">· 완료</span>',
             }
             if agent_id in agent_item_index:
                 items[agent_item_index[agent_id]] = completed_item
@@ -234,52 +231,6 @@ def _status_timeline(
                 agent_item_index[agent_id] = len(items)
                 items.append(completed_item)
             continue
-        if event_name == "evaluation_started":
-            loop = data.get("loop", "?")
-            maximum = data.get("max_loops", "?")
-            evaluation_item_index = len(items)
-            items.append({
-                "icon": "④",
-                "title": "Execution 평가",
-                "detail": f"Evaluation Middleware <span style=\"color:#b45309\">· {loop}/{maximum} 평가 중</span>",
-            })
-            continue
-        if event_name == "evaluation_completed":
-            verdict = str(data.get("verdict", ""))
-            verdict_text = "승인" if verdict == "pass" else "보완 요청"
-            color = "#137333" if verdict == "pass" else "#b45309"
-            loop = data.get("loop", "?")
-            maximum = data.get("max_loops", "?")
-            reason = html.escape(str(data.get("reason", "")))
-            completed_item = {
-                "icon": "⑤",
-                "title": "Execution 평가",
-                "detail": f"Evaluation Middleware <span style=\"color:{color}\">· {loop}/{maximum} {verdict_text}</span>" + (f"<br><span style=\"color:#6b7280\">{reason}</span>" if reason else ""),
-            }
-            if evaluation_item_index is None:
-                evaluation_item_index = len(items)
-                items.append(completed_item)
-            else:
-                items[evaluation_item_index] = completed_item
-            continue
-        if event_name == "revision_started":
-            stages = data.get("stages", [])
-            revised_ids = [agent_id for stage in stages if isinstance(stage, dict) for agent_id in stage.get("agent_ids", [])]
-            labels = {agent.id: agent.label for agent in FOOD_AGENT_DEFINITIONS}
-            names = ", ".join(html.escape(labels.get(str(agent_id), str(agent_id))) for agent_id in revised_ids)
-            items.append({
-                "icon": "⑥",
-                "title": "보완 실행",
-                "detail": f"{names or '선택된 Agent'} <span style=\"color:#b45309\">· 재실행</span>",
-            })
-            continue
-        if event_name == "evaluation_limit_reached":
-            items.append({
-                "icon": "!",
-                "title": "Execution 평가",
-                "detail": "Evaluation Middleware <span style=\"color:#b45309\">· 최대 3회 도달, 현재 결과 반환</span>",
-            })
-
     steps: list[str] = []
     for index, item in enumerate(items):
         steps.append(
@@ -298,58 +249,8 @@ def _status_timeline(
     return gr.HTML(f'<div style="margin:6px 0;padding:8px 10px;border:1px solid #d9e2f3;border-radius:8px;background:#f8fbff">{content}</div>', container=False)
 
 
-def _tool_calling_details(agent_id: str, tool_calls: list[dict[str, Any]]) -> str:
-    """Return a compact, read-only audit view for a specialist's chosen tools."""
-    tool_types = {tool["name"]: tool["type"] for tool in tool_catalog_for_food_agent(agent_id)}
-    rows: list[str] = []
-    for call in tool_calls:
-        if not isinstance(call, dict):
-            continue
-        name = html.escape(str(call.get("name", "Tool")))
-        kind = html.escape(tool_types.get(str(call.get("name", "")), "Tool"))
-        arguments = html.escape(json.dumps(call.get("arguments", {}), ensure_ascii=False))
-        result_value = call.get("result", {})
-        if kind == "Agent as a Tool" and isinstance(result_value, dict) and isinstance(result_value.get("asset_id"), str):
-            image_data_url = marketing_image_asset(result_value["asset_id"])
-            image_preview = (
-                f'<br><img src="{html.escape(image_data_url, quote=True)}" alt="Marketing Image Agent 생성 이미지" style="margin-top:6px;width:100%;max-height:160px;object-fit:cover;border-radius:6px">'
-                if image_data_url
-                else '<br><span style="color:#6b7280">이미지 asset은 현재 UI 프로세스에 없습니다.</span>'
-            )
-            rows.append(
-                f'<li><b>{name}</b> <span style="color:#6b7280">({kind})</span>'
-                f'<br><span style="color:#6b7280">입력:</span> <code>{arguments}</code>'
-                f'<br><span style="color:#6b7280">Marketing Image Agent · {html.escape(str(result_value["asset_id"]))}</span>{image_preview}</li>'
-            )
-            continue
-        if kind == "Agent as a Tool" and isinstance(result_value, dict) and isinstance(result_value.get("html"), str):
-            html_draft = result_value["html"]
-            rows.append(
-                f'<li><b>{name}</b> <span style="color:#6b7280">({kind})</span>'
-                f'<br><span style="color:#6b7280">입력:</span> <code>{arguments}</code>'
-                '<br><span style="color:#6b7280">Marketing HTML Agent 결과</span>'
-                f'<pre style="max-height:120px;overflow:auto;white-space:pre-wrap">{html.escape(html_draft)}</pre>'
-                f'<iframe title="Marketing HTML preview" sandbox="" style="width:100%;height:180px;border:1px solid #d9e2f3;border-radius:6px;background:white" srcdoc="{html.escape(html_draft, quote=True)}"></iframe></li>'
-            )
-            continue
-        result = html.escape(json.dumps(result_value, ensure_ascii=False))
-        rows.append(
-            f'<li><b>{name}</b> <span style="color:#6b7280">({kind})</span>'
-            f'<br><span style="color:#6b7280">입력:</span> <code>{arguments}</code>'
-            f'<br><span style="color:#6b7280">결과:</span> <code>{result}</code></li>'
-        )
-    if not rows:
-        return ""
-    return (
-        '<details style="margin-top:8px;font-size:.82em">'
-        f'<summary style="cursor:pointer;color:#174ea6">Tool Calling · {len(rows)}개</summary>'
-        f'<ul style="margin:6px 0 0;padding-left:18px">{"".join(rows)}</ul></details>'
-    )
-
-
 def _agent_dashboard(
     agent_states: dict[str, dict[str, Any]],
-    show_tool_calling: bool = False,
     collapsed: bool = False,
 ) -> str:
     """Render every Work agent at once; each stream event refreshes its own card."""
@@ -363,12 +264,6 @@ def _agent_dashboard(
         if status == "completed":
             badge = "✓ 완료"
             body = _AGENT_MARKDOWN(state.get("answer", ""))
-            tool_calls = state.get("tool_calls", [])
-            if tool_calls:
-                tool_names = ", ".join(html.escape(str(call["name"])) for call in tool_calls)
-                body += f'<div style="margin-top:8px;color:#5f6368;font-size:.82em">Tool Calling: {tool_names}</div>'
-                if show_tool_calling:
-                    body += _tool_calling_details(agent.id, tool_calls)
         elif status == "running":
             badge = "◌ 실행 중"
             partial_answer = state.get("answer", "")
@@ -402,166 +297,40 @@ def _final_answer_bubble(outcome: dict[str, Any]) -> str:
     return f'<section class="workflow-final-answer"><div class="workflow-final-answer__title">최종 답변 · {html.escape(final_label)}</div>{answer}</section>'
 
 
-def _research_card(tasks: list[dict[str, str]], findings: list[dict[str, str]]) -> gr.HTML:
-    """Render completed parallel research notes without exposing workflow internals."""
-    completed = {finding["id"]: finding for finding in findings}
-    rows: list[str] = []
-    for task in tasks:
-        finding = completed.get(task["id"])
-        if finding:
-            text = html.escape(finding["content"]).replace("\n", "<br>")
-            body = f'<span style="color:#374151">{text}</span>'
-            marker = "✓"
-            color = "#137333"
-        else:
-            body = '<span style="color:#6b7280">조사 중…</span>'
-            marker = "◌"
-            color = "#174ea6"
-        rows.append(
-            f'''<div style="padding:6px 0;border-top:1px solid #e5e7eb"><span style="color:{color};font-weight:700">{marker}</span> <b>{html.escape(task["title"])}</b><div style="padding:3px 0 0 18px;font-size:.88em;line-height:1.45">{body}</div></div>'''
-        )
-    return gr.HTML(
-        f'''<div style="margin:6px 0;padding:8px 10px;border:1px solid #c7d2e1;border-radius:8px;background:#fff"><div style="font-size:.88em;font-weight:700;color:#174ea6;margin-bottom:4px">🔬 병렬 리서처 {len(findings)}/{len(tasks)}</div>{''.join(rows)}</div>''',
-        container=False,
-    )
-
-
-def _research_planning_card(error: str | None = None) -> gr.HTML:
-    if error:
-        content = f'<span style="color:#b3261e">연구 역할 계획을 만들지 못했습니다: {html.escape(error)}</span>'
-    else:
-        content = '<span style="color:#174ea6">🧭 요청에 맞는 병렬 리서처 역할을 계획 중…</span>'
-    return gr.HTML(
-        f'<div style="margin:6px 0;padding:8px 10px;border:1px solid #c7d2e1;border-radius:8px;background:#fff;font-size:.88em">{content}</div>',
-        container=False,
-    )
-
-
-def _plan_researchers(
-    request: str, settings: Settings
-) -> tuple[list[dict[str, str]], str | None]:
-    """Ask the model to design 3–4 independent research roles for this request."""
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "너는 리서치 팀 리드다. 사용자 요청에 필요한 독립적인 병렬 리서처 3~4명을 설계한다. "
-                "각 역할의 관점이 겹치지 않게 한다. JSON만 반환한다: "
-                '{"researchers":[{"id":"unique-id","title":"짧은 역할명","focus":"조사 범위"}]}. '
-                "id는 영문 소문자·하이픈으로 고유하게, title과 focus는 한국어로 작성한다."
-            ),
-        },
-        {"role": "user", "content": request},
-    ]
-    try:
-        raw = chat_text(settings, messages).strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        planned = json.loads(raw).get("researchers", [])
-        if not isinstance(planned, list) or not 3 <= len(planned) <= 4:
-            raise ValueError("리서처 수가 3~4개가 아닙니다")
-        tasks = [
-            {key: str(item[key]).strip() for key in ("id", "title", "focus")}
-            for item in planned
-            if isinstance(item, dict) and all(str(item.get(key, "")).strip() for key in ("id", "title", "focus"))
-        ]
-        if len(tasks) != len(planned) or len({task["id"] for task in tasks}) != len(tasks):
-            raise ValueError("리서처 역할 형식 또는 id가 유효하지 않습니다")
-        return tasks, None
-    except Exception as error:
-        return [], type(error).__name__
-
-
-def _run_researcher(
-    task: dict[str, str], request: str, settings: Settings
-) -> dict[str, str]:
-    """Run one independent research lens; callers execute these concurrently."""
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "너는 병렬 리서처 중 한 명이다. 지정된 관점만 조사해 한국어로 2~3개 짧은 bullet을 작성한다. "
-                "웹 검색이나 최신 수치를 확인한 것처럼 말하지 말고, 확실하지 않은 최신 정보는 확인 필요라고 표시한다. "
-                "출처·수치·사실을 지어내지 않는다."
-            ),
-        },
-        {
-            "role": "user",
-            "content": f"비교 요청: {request}\n조사 관점: {task['title']} ({task['focus']})",
-        },
-    ]
-    try:
-        content = chat_text(settings, messages)
-    except Exception as error:
-        content = f"조사 응답을 받지 못했습니다 ({type(error).__name__})."
-    return {"id": task["id"], "title": task["title"], "content": content}
-
-
-def _final_reply(
-    message: str,
-    outcome: dict[str, Any],
-    history: list[dict[str, Any]],
-    settings: Settings,
-    research_findings: list[dict[str, str]] | None = None,
-) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": "너는 workflow 실습의 교육 보조자다. 사용자 요청에 직접 한국어로 간결히 답한다. 실행 trace, 점수, fallback, route, specialist는 내부 UI 정보이므로 사용자가 명시적으로 묻지 않으면 절대 언급하거나 나열하지 않는다. 실제 외부 작업이 실행됐다고 꾸며내지 않는다.",
-        },
-        *[item for item in history[-6:] if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str)],
-        {
-            "role": "user",
-            "content": (
-                f"사용자 요청: {message}\n\n참고용 workflow 결과: {json.dumps(outcome, ensure_ascii=False)}"
-                f"\n\n병렬 조사 메모: {json.dumps(research_findings or [], ensure_ascii=False)}"
-                "\n\n위 내부 실행을 설명하지 말고, 조사 메모가 있다면 이를 종합해 사용자 요청에 대한 답변만 작성해줘."
-            ),
-        },
-    ]
-    try:
-        return chat_text(settings, messages)
-    except Exception as error:
-        raise RuntimeError("LLM 응답 생성에 실패했습니다. 모델 배포 상태와 AI Core 권한을 확인하세요.") from error
-
-
 def build_workflow_ui(
     settings: Settings | None = None,
     *,
     title: str = "LLM-Orchestrated Agent Workflow Chat",
-    show_tool_calling: bool = False,
     default_request: str = DEFAULT_WORKFLOW_REQUEST,
+    scenarios: tuple[dict[str, Any], ...] | None = None,
 ) -> gr.Blocks:
-    """Build the UI; Cohere routes and the Orchestrator selects Work Agents."""
+    """Build the UI for the LLM-authored Agent workflow."""
     settings = settings or load_settings()
     settings.require_ai_core()
     debug_source = f"{title} UI"
+    active_scenarios = WORKFLOW_SCENARIOS if scenarios is None else scenarios
 
     def workflow_chat(
         message: str,
         display_history: list[dict[str, Any]],
         conversation_history: list[dict[str, Any]],
-        marketing_html_draft: str | None,
         min_margin: float,
     ):
         display_history = list(display_history or [])
         history = _plain_conversation_history(conversation_history)
-        active_marketing_html = marketing_html_draft if isinstance(marketing_html_draft, str) else None
         if not message or not message.strip():
-            yield "", display_history + [{"role": "assistant", "content": "<div style='color:#b3261e'>요청을 입력하세요.</div>"}], history, active_marketing_html
+            yield "", display_history + [{"role": "assistant", "content": "<div style='color:#b3261e'>요청을 입력하세요.</div>"}], history
             return
         pending_display_history = display_history + [{"role": "user", "content": message}]
         pending_history = history + [{"role": "user", "content": message}]
-        workflow_request_with_context = build_contextual_request(message, history, active_marketing_html)
         write_latest_workflow_debug_log({
             "status": "running",
             "source": debug_source,
             "user_message": message,
             "conversation_context": history,
-            "workflow_request_with_context": workflow_request_with_context,
             "min_margin": float(min_margin),
         })
-        yield "", pending_display_history + [{"role": "assistant", "content": _status_timeline([], running=True, show_tool_calling=show_tool_calling)}], pending_history, active_marketing_html
+        yield "", pending_display_history + [{"role": "assistant", "content": _status_timeline([], running=True)}], pending_history
         trace: list[dict[str, Any]] = []
         agent_states: dict[str, dict[str, str]] = {}
         outcome: dict[str, Any] | None = None
@@ -571,12 +340,9 @@ def build_workflow_ui(
                 settings=settings,
                 min_margin=float(min_margin),
                 conversation_history=history,
-                marketing_html_draft=active_marketing_html,
             ):
                 if "trace_event" in event:
                     trace.append(event["trace_event"])
-                if event["type"] == "route" and event["trace_event"]["payload"]["selected"] == "work":
-                    agent_states = {"work-planning": {"status": "queued"}}
                 if event["type"] == "orchestration_plan":
                     for stage in event["plan"]["stages"]:
                         for agent_id in stage["agent_ids"]:
@@ -589,75 +355,35 @@ def build_workflow_ui(
                     agent_states[agent_id]["answer"] = agent_states[agent_id].get("answer", "") + event["delta"]
                 if event["type"] == "agent_completed":
                     result = event["agent_result"]
-                    agent_states[result["agent_id"]] = {"status": "completed", "answer": result["answer"], "tool_calls": result.get("tool_calls", [])}
-                    if _html_tool_draft_created(result.get("tool_calls", [])):
-                        created_draft = latest_marketing_html_draft()
-                        if created_draft and isinstance(created_draft.get("html"), str):
-                            active_marketing_html = created_draft["html"]
+                    agent_states[result["agent_id"]] = {"status": "completed", "answer": result["answer"]}
                 if event["type"] == "complete":
                     outcome = event["result"]
                 if event["type"] != "complete":
                     conversation = pending_display_history + [
-                        {"role": "assistant", "content": _status_timeline(trace, running=True, show_tool_calling=show_tool_calling)},
+                        {"role": "assistant", "content": _status_timeline(trace, running=True)},
                     ]
                     if agent_states:
-                        conversation.append({"role": "assistant", "content": _agent_dashboard(agent_states, show_tool_calling=show_tool_calling)})
-                    yield "", conversation, pending_history, active_marketing_html
+                        conversation.append({"role": "assistant", "content": _agent_dashboard(agent_states)})
+                    yield "", conversation, pending_history
         except Exception as error:
             conversation = pending_display_history + [
-                {"role": "assistant", "content": _status_timeline(trace, show_tool_calling=show_tool_calling)},
+                {"role": "assistant", "content": _status_timeline(trace)},
                 {"role": "assistant", "content": f'<div style="color:#b3261e">{html.escape(str(error))}</div>'},
             ]
             if agent_states:
-                conversation.append({"role": "assistant", "content": _agent_dashboard(agent_states, show_tool_calling=show_tool_calling)})
+                conversation.append({"role": "assistant", "content": _agent_dashboard(agent_states)})
             write_latest_workflow_debug_log({
                 "status": "workflow_error",
                 "source": debug_source,
                 "user_message": message,
                 "conversation_context": history,
-                "workflow_request_with_context": workflow_request_with_context,
                 "trace": trace,
                 "agent_states": agent_states,
                 "error": {"type": type(error).__name__, "message": str(error)},
             })
-            yield "", conversation, pending_history, active_marketing_html
+            yield "", conversation, pending_history
             return
         if outcome is None:
-            return
-        if outcome["route"] == "chat":
-            try:
-                answer = _final_reply(message, outcome, history, settings)
-            except RuntimeError as error:
-                write_latest_workflow_debug_log({
-                    "status": "final_response_error",
-                    "source": debug_source,
-                    "user_message": message,
-                    "conversation_context": history,
-                    "workflow_request_with_context": workflow_request_with_context,
-                    "trace": trace,
-                    "workflow_outcome": outcome,
-                    "error": {"type": type(error).__name__, "message": str(error)},
-                })
-                yield "", pending_display_history + [
-                    {"role": "assistant", "content": _status_timeline(trace, show_tool_calling=show_tool_calling)},
-                    {"role": "assistant", "content": f'<div style="color:#b3261e">{html.escape(str(error))}</div>'},
-                ], pending_history, active_marketing_html
-                return
-            next_history = pending_history + [{"role": "assistant", "content": answer}]
-            write_latest_workflow_debug_log({
-                "status": "completed",
-                "source": debug_source,
-                "user_message": message,
-                "conversation_context": history,
-                "workflow_request_with_context": workflow_request_with_context,
-                "trace": trace,
-                "workflow_outcome": outcome,
-                "final_response": answer,
-            })
-            yield "", pending_display_history + [
-                {"role": "assistant", "content": _status_timeline(trace, show_tool_calling=show_tool_calling)},
-                {"role": "assistant", "content": answer},
-            ], next_history, active_marketing_html
             return
         answer = str(outcome.get("result", ""))
         next_history = pending_history + [{"role": "assistant", "content": answer}]
@@ -666,30 +392,31 @@ def build_workflow_ui(
             "source": debug_source,
             "user_message": message,
             "conversation_context": history,
-            "workflow_request_with_context": workflow_request_with_context,
             "trace": trace,
             "agent_states": agent_states,
             "workflow_outcome": outcome,
             "final_response": answer,
         })
-        yield "", pending_display_history + [
-            {"role": "assistant", "content": _status_timeline(trace, show_tool_calling=show_tool_calling, collapsed=True)},
-            {"role": "assistant", "content": _agent_dashboard(agent_states, show_tool_calling=show_tool_calling, collapsed=True)},
-            {"role": "assistant", "content": _final_answer_bubble(outcome)},
-        ], next_history, active_marketing_html
+        conversation = pending_display_history + [
+            {"role": "assistant", "content": _status_timeline(trace, collapsed=True)},
+        ]
+        if agent_states:
+            conversation.append({"role": "assistant", "content": _agent_dashboard(agent_states, collapsed=True)})
+        if outcome.get("route") == "work":
+            conversation.append({"role": "assistant", "content": _final_answer_bubble(outcome)})
+        else:
+            conversation.append({"role": "assistant", "content": _AGENT_MARKDOWN(answer)})
+        yield "", conversation, next_history
 
     with gr.Blocks(css=SETTINGS_MODAL_CSS) as app:
         with gr.Row(equal_height=True):
             with gr.Column(scale=8):
                 gr.Markdown(f"## {title}")
-            with gr.Column(scale=1, min_width=135):
-                open_agent_tools = gr.Button("🧩 Agent · MCP Tools", size="sm")
             with gr.Column(scale=1, min_width=90):
                 open_settings = gr.Button("⚙️ 설정", size="sm")
         gr.HTML(WORKFLOW_GRAPH_SVG, label="Workflow graph")
         with gr.Column(elem_id="workflow-chat-shell"):
             conversation_state = gr.State([])
-            marketing_html_state = gr.State(None)
             chatbot = gr.Chatbot(
                 type="messages",
                 label="Workflow conversation",
@@ -710,40 +437,39 @@ def build_workflow_ui(
                 value=0.0,
                 step=0.01,
                 label="최소 margin",
-                info="1·2위 score 차이가 이 값보다 작으면 상태 카드에 낮은 신뢰도로 표시합니다. 선택된 route는 바꾸지 않습니다.",
+                info="1·2위 score 차이가 이 값보다 작으면 Agent를 실행하지 않고, 요청을 구체화해 달라는 명확화 응답으로 종료합니다.",
             )
             close_settings = gr.Button("닫기")
-        with gr.Column(visible=False, elem_id="agent-tool-modal") as agent_tool_modal:
-            with gr.Row(equal_height=True):
-                with gr.Column(scale=2, min_width=210):
-                    gr.Markdown("### Agents")
-                    agent_tool_buttons = {
-                        agent.id: gr.Button(agent.label, size="sm")
-                        for agent in FOOD_AGENT_DEFINITIONS
-                    }
-                with gr.Column(scale=5):
-                    gr.Markdown("### Agent · MCP Tools")
-                    agent_tool_detail = gr.HTML(
-                        _agent_tool_catalog_panel(FOOD_AGENT_DEFINITIONS[0].id),
-                        container=False,
-                    )
-            close_agent_tools = gr.Button("닫기")
+        with (
+            gr.Accordion("교육용 시나리오", open=True),
+            gr.Row(
+                elem_id="workflow-scenario-card-grid",
+                elem_classes=["workflow-scenario-cards"],
+            ),
+        ):
+            for scenario in active_scenarios:
+                with gr.Column(elem_classes=["workflow-scenario-card"]):
+                    gr.HTML(_scenario_card_html(scenario))
+                    scenario_button = gr.Button("요청 선택", variant="secondary")
+                scenario_button.click(
+                    lambda request=scenario["request"], history=scenario["history"]: (
+                        request,
+                        list(history),
+                        list(history),
+                        0.0,
+                    ),
+                    outputs=[message, chatbot, conversation_state, min_margin],
+                    queue=False,
+                )
         open_settings.click(lambda: gr.update(visible=True), outputs=settings_modal)
         close_settings.click(lambda: gr.update(visible=False), outputs=settings_modal)
-        open_agent_tools.click(lambda: gr.update(visible=True), outputs=agent_tool_modal)
-        close_agent_tools.click(lambda: gr.update(visible=False), outputs=agent_tool_modal)
-        for agent in FOOD_AGENT_DEFINITIONS:
-            agent_tool_buttons[agent.id].click(
-                lambda agent_id=agent.id: _agent_tool_catalog_panel(agent_id),
-                outputs=agent_tool_detail,
-            )
-        chat_inputs = [message, chatbot, conversation_state, marketing_html_state, min_margin]
-        message.submit(workflow_chat, inputs=chat_inputs, outputs=[message, chatbot, conversation_state, marketing_html_state])
+        chat_inputs = [message, chatbot, conversation_state, min_margin]
+        message.submit(workflow_chat, inputs=chat_inputs, outputs=[message, chatbot, conversation_state])
     return app
 
 
 def launch_workflow_ui() -> gr.Blocks:
-    """Build and launch the notebook-local workflow UI."""
+    """Launch lesson 01."""
     app = build_workflow_ui()
     app.launch(inline=True, share=False, show_error=True, server_name="127.0.0.1", height=900)
     return app

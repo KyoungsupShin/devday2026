@@ -13,7 +13,11 @@ sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
 from lab_common.config import Settings
 from src.prompt_model.lab_core import compare_prompts, run_chat, run_chat_stream
-from src.embeddings.lab_core import compare_embeddings, cosine_similarity
+from src.embeddings.lab_core import (
+    compare_embeddings,
+    cosine_similarity,
+    retrieve_similar_texts,
+)
 from src.business_embedding.lab_core import (
     holdout_indices_by_label,
     recommend_business_queue,
@@ -192,6 +196,51 @@ class LabCoreTests(unittest.TestCase):
             compare_embeddings(
                 ["one", "two"], settings(), embedder=lambda *_: np.asarray([[1, 0]])
             )
+
+    def test_retrieve_similar_texts_ranks_query_documents_in_one_batch(self):
+        calls: list[tuple[list[str], str | None]] = []
+
+        def fake_embedder(texts, _settings, model):
+            calls.append((list(texts), model))
+            return np.asarray([[1, 0], [0.9, 0.1], [0.2, 0.8], [0.8, 0.2]])
+
+        outcome = retrieve_similar_texts(
+            " 환불 요청 ",
+            ["환불 절차", "배송 조회", "환불 상태"],
+            settings(),
+            model="embedding-test",
+            top_k=2,
+            embedder=fake_embedder,
+        )
+
+        self.assertEqual(
+            calls,
+            [(["환불 요청", "환불 절차", "배송 조회", "환불 상태"], "embedding-test")],
+        )
+        self.assertEqual(outcome["candidate_count"], 3)
+        self.assertEqual(
+            [item["document_index"] for item in outcome["results"]], [0, 2]
+        )
+        self.assertEqual([item["rank"] for item in outcome["results"]], [1, 2])
+        json.dumps(outcome)
+
+    def test_retrieve_similar_texts_applies_threshold_and_validates_input(self):
+        outcome = retrieve_similar_texts(
+            "q",
+            ["near", "far"],
+            settings(),
+            min_similarity=0.5,
+            embedder=lambda *_: np.asarray([[1, 0], [0.8, 0.2], [0, 1]]),
+        )
+        self.assertEqual([item["document"] for item in outcome["results"]], ["near"])
+
+        no_call = lambda *_: self.fail("SDK should not be called")
+        with self.assertRaisesRegex(ValueError, "검색 질문"):
+            retrieve_similar_texts(" ", ["doc"], settings(), embedder=no_call)
+        with self.assertRaisesRegex(ValueError, "top_k"):
+            retrieve_similar_texts("q", ["doc"], settings(), top_k=0, embedder=no_call)
+        with self.assertRaisesRegex(ValueError, "min_similarity"):
+            retrieve_similar_texts("q", ["doc"], settings(), min_similarity=2, embedder=no_call)
 
     def test_workflow_keeps_one_holdout_per_label(self):
         cases = [

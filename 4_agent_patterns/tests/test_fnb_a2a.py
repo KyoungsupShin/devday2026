@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 import random
 import sys
@@ -15,7 +16,6 @@ sys.path.insert(0, str(ROOT / "4_agent_patterns"))
 
 from lab_common.config import Settings
 from src.agent_to_agent import executor, grounding, human_approval
-from src.agent_to_agent import harness
 from src.agent_to_agent import orchestration as orchestration_module
 from src.agent_to_agent.catalog import (
     AGENT_CATALOG,
@@ -32,7 +32,14 @@ from src.agent_to_agent.orchestration import (
     _parse_decision,
     _parse_observation,
     list_agents,
+    run_handoff_steps,
 )
+from src.agent_to_agent_advanced import harness
+from src.agent_to_agent_advanced import ui as advanced_ui
+from src.agent_to_agent_advanced.orchestration import (
+    _orchestrator_turn as _advanced_orchestrator_turn,
+)
+from src.agent_to_agent_advanced.ui import _harness_chat_html, _harness_dashboard_html
 from src.agent_to_agent.prompts import get_optional_prompt, get_prompt, render_prompt
 from src.agent_to_agent.server import build_agent_card, create_a2a_app
 from src.agent_to_agent.tools import snapshot_reader
@@ -78,8 +85,8 @@ from src.agent_to_agent.ui import (
     _field_response_chat_message,
     _human_approval_chat_message,
     _human_approval_fallback_chat_message,
+    _human_approval_sent_chat_message,
     _human_reviewed_in_chat,
-    _harness_chat_html,
     _scenario_card_html,
     _subagent_chat_message,
     _task_plan_chat_message,
@@ -280,19 +287,37 @@ class FnbA2ATests(unittest.TestCase):
             "경영기획 · 사업관리",
         )
 
-    def test_sop_requires_facilities_review_before_procurement_for_field_requests(self):
-        sop = (
-            ROOT
-            / "4_agent_patterns"
-            / "docs"
-            / "interdepartmental_collaboration_sop.md"
-        ).read_text(encoding="utf-8")
-        engineer = sop.index("설비팀 엔지니어가")
-        manager = sop.index("설비팀 관리자가")
-        procurement = sop.index("구매팀이 기준정보")
-        self.assertIn("현장 작업자가 설비·설비 부품·유지보수와 관련된 구매를 요청", sop)
-        self.assertLess(engineer, manager)
-        self.assertLess(manager, procurement)
+    def test_sop_defers_human_approval_until_required_reviews_finish(self):
+        paths = (
+            ROOT / "data" / "context" / "interdepartmental_collaboration_sop.md",
+            ROOT / "4_agent_patterns" / "docs" / "interdepartmental_collaboration_sop.md",
+        )
+        for path in paths:
+            sop = path.read_text(encoding="utf-8")
+            facilities = sop.index("먼저 설비팀이")
+            procurement = sop.index("다음으로 구매팀이")
+            planning = sop.index("이어서 제조기획팀이")
+            human = sop.index("4. 결과 정리 및 Human-in-the-loop 확인")
+            self.assertIn("설비팀 → 구매팀 → 제조기획팀 순서", sop)
+            self.assertIn("이 단계에서 사람의 승인·결정을 요청하지 않는다.", sop)
+            self.assertIn("세 Team 검토가 끝난 뒤의 최종 단계", sop)
+            self.assertLess(facilities, procurement)
+            self.assertLess(procurement, planning)
+            self.assertLess(planning, human)
+
+    def test_notebook_sop_revision_keeps_human_approval_at_the_end(self):
+        notebook_path = ROOT / "4_agent_patterns" / "notebooks" / "03_agent_to_agent.ipynb"
+        notebook = json.loads(notebook_path.read_text(encoding="utf-8"))
+        source = next(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if "REVISED_SOP_PROCESS" in "".join(cell.get("source", []))
+        )
+        self.assertIn("설비팀 → 구매팀 → 제조기획팀 순서", source)
+        self.assertIn("세 Team 검토가 끝난 뒤의 최종 단계", source)
+        self.assertIn("RESTORE_SOP_PROCESS = '''## 프로세스", source)
+        self.assertIn("REVISED_SOP_PROCESS, RESTORE_SOP_PROCESS", source)
+        self.assertNotIn("설비팀 관리자가", source)
 
     def test_context_rows_have_local_snapshot_scope_and_registered_relations(self):
         data_root = snapshot_reader.DATA_DIRECTORY
@@ -854,6 +879,13 @@ class FnbA2ATests(unittest.TestCase):
         self.assertIn(
             "Do not rely on a fixed Team order, keywords, or a preset", prompt
         )
+        self.assertIn(
+            "scoped Grounding evidence explicitly defines a bounded", prompt
+        )
+        self.assertIn(
+            "defer\nHuman-in-the-loop approval and completion until artifacts from every",
+            prompt,
+        )
         self.assertIn("proactively assess whether a manual can establish", prompt)
         self.assertIn(
             "perform a focused manual search before deciding the first Team", prompt
@@ -1056,6 +1088,13 @@ class FnbA2ATests(unittest.TestCase):
             reviewed["review_result"]["provider"], "chat_human_in_the_loop"
         )
         self.assertEqual(reviewed["delivery_result"]["state"], "delivery_failed")
+
+    def test_successful_graph_delivery_keeps_the_human_decision_in_chat(self):
+        rendered = _chat_message_html(_human_approval_sent_chat_message())
+
+        self.assertIn("Human in the loop", rendered)
+        self.assertIn("명시적으로 승인", rendered)
+        self.assertIn("Microsoft Graph", rendered)
 
     def test_human_approval_is_rendered_as_chat_actions_with_draft_tooltip(self):
         message = _human_approval_chat_message(
@@ -1272,7 +1311,7 @@ class FnbA2ATests(unittest.TestCase):
 
     def test_harness_validates_editor_output_and_rejects_boundary_edits(self):
         with patch(
-            "src.agent_to_agent.harness.chat_text",
+            "src.agent_to_agent_advanced.harness.chat_text",
             return_value=(
                 '{"variants":[{"title":"질문 명확화",'
                 '"addendum":"Before another delegation, name the material question.",'
@@ -1311,8 +1350,8 @@ class FnbA2ATests(unittest.TestCase):
         baseline = fake_runner("요청", harness_addendum=None)
         calls.clear()
         with (
-            patch("src.agent_to_agent.harness.propose_variants", return_value=variants),
-            patch("src.agent_to_agent.harness.compose_variant", return_value=composed),
+            patch("src.agent_to_agent_advanced.harness.propose_variants", return_value=variants),
+            patch("src.agent_to_agent_advanced.harness.compose_variant", return_value=composed),
         ):
             experiment = harness.run_harness_experiment(
                 "요청",
@@ -1332,6 +1371,55 @@ class FnbA2ATests(unittest.TestCase):
         adopted = harness.adopt_variant(experiment, chosen)
         self.assertEqual(adopted["active_harness"], variants[0]["addendum"])
 
+    def test_advanced_ui_passes_completed_outcome_to_harness_in_same_session(self):
+        """The right panel must receive the left panel's final A2A result."""
+
+        expected_context_id = "ui-session-baseline"
+
+        def fake_stream(*_args, **_kwargs):
+            yield {"type": "field_handoff_received"}
+            yield {
+                "type": "complete",
+                "result": {
+                    "context_id": expected_context_id,
+                    "termination": {"state": "completed"},
+                    "artifacts": [],
+                },
+            }
+
+        def fake_harness(_request, *, baseline_result, settings):
+            self.assertEqual(baseline_result["context_id"], expected_context_id)
+            self.assertIs(settings, self.settings)
+            return {"variants": [], "baseline": baseline_result}
+
+        with (
+            patch.object(advanced_ui, "list_agents", return_value=[]),
+            patch.object(advanced_ui, "run_handoff_stream", fake_stream),
+            patch.object(
+                advanced_ui,
+                "persist_a2a_conversation",
+                return_value={"status": "completed"},
+            ),
+            patch.object(advanced_ui, "run_harness_experiment", fake_harness),
+        ):
+            app = advanced_ui.build_a2a_ui(self.settings)
+            workflow = next(
+                item.fn
+                for item in app.fns.values()
+                if item.fn.__name__ == "run_workflow"
+            )
+            harness_panel = next(
+                item.fn
+                for item in app.fns.values()
+                if item.fn.__name__ == "run_harness_panel"
+            )
+            final_output = list(workflow("상태 전달 테스트"))[-1]
+            baseline_result = final_output[3]
+            harness_output = harness_panel("상태 전달 테스트", baseline_result)
+
+        self.assertEqual(baseline_result["context_id"], expected_context_id)
+        self.assertEqual(harness_output[1]["baseline"]["context_id"], expected_context_id)
+
     def test_harness_does_not_execute_invalid_editor_proposals(self):
         calls = []
 
@@ -1340,7 +1428,7 @@ class FnbA2ATests(unittest.TestCase):
             return {"artifacts": [], "termination": {"state": "completed"}}
 
         with patch(
-            "src.agent_to_agent.harness.propose_variants",
+            "src.agent_to_agent_advanced.harness.propose_variants",
             side_effect=ValueError("invalid editor JSON"),
         ):
             experiment = harness.run_harness_experiment(
@@ -1350,7 +1438,56 @@ class FnbA2ATests(unittest.TestCase):
         self.assertEqual(experiment["trials"]["candidate_1"]["status"], "failed")
         self.assertEqual(experiment["trials"]["composed"]["status"], "failed")
 
+    def test_harness_verifies_an_applied_flow_and_supports_session_rollback(self):
+        baseline = {
+            "team_order": ["procurement"],
+            "artifact_count": 1,
+            "termination_state": "completed",
+            "requester_update": {"summary": "구매 검토 완료"},
+            "evidence_summaries": ["재고 확인"],
+        }
+        experiment = {
+            "request": "동일 요청",
+            "trials": {"baseline": {"comparison": baseline}},
+            "comparison": [{"candidate_id": "A", "status": "ok", **baseline}],
+            "adoption": {
+                "candidate_id": "A",
+                "title": "근거 우선",
+                "active_harness": "Review prior evidence before completion.",
+            },
+        }
+        improved_result = {
+            "artifacts": [
+                {"producer": team, "artifact": {"payload": {"team_synthesis": {"summary": summary}}}}
+                for team, summary in (
+                    ("procurement", "재고 확인"),
+                    ("planning", "생산 영향 확인"),
+                    ("it", "ERP 준비 조건 확인"),
+                )
+            ],
+            "termination": {
+                "state": "completed",
+                "decision": {"requester_update": {
+                    "status": "ready", "summary": "검토 완료", "next_action": "승인 요청"
+                }},
+            },
+            "human_approvals": [],
+        }
+        verification = harness.record_live_verification(experiment, improved_result, "동일 요청")
+        self.assertEqual(verification["state"], "improved")
+        self.assertGreater(verification["delta"], 0)
+        self.assertIn("흐름 점수", _harness_dashboard_html(experiment))
+
+        rollback = harness.rollback_adoption(experiment)
+        self.assertEqual(rollback["candidate_id"], "A")
+        self.assertNotIn("adoption", experiment)
+        self.assertIn("세션 적용을 롤백했습니다", _harness_chat_html(experiment))
+
     def test_harness_panel_hides_addendum_until_human_adoption(self):
+        self.assertIn("<svg", _harness_chat_html())
+        self.assertNotIn(">H<", _harness_chat_html())
+        self.assertNotIn("Harness² 비교 실행", _harness_chat_html())
+        self.assertIn("Harness² 비교 실행", _harness_chat_html(baseline_ready=True))
         experiment = {
             "comparison": [
                 {
@@ -1367,6 +1504,7 @@ class FnbA2ATests(unittest.TestCase):
         before_adoption = _harness_chat_html(experiment)
         self.assertIn("Harness² 실험방", before_adoption)
         self.assertIn("Probe A", before_adoption)
+        self.assertIn("사람 채택 후보 선택", before_adoption)
         self.assertNotIn("비공개 세션 보조 지침", before_adoption)
 
         after_adoption = _harness_chat_html(
@@ -1380,6 +1518,22 @@ class FnbA2ATests(unittest.TestCase):
         )
         self.assertIn("비공개 세션 보조 지침", after_adoption)
 
+    def test_chat_actors_use_role_icons_instead_of_initial_letters(self):
+        for sender, kind in (
+            ("요청부서", "field"),
+            ("Orchestration Agent", "orchestrator"),
+            ("F&B 구매팀 Agent", "agent"),
+            ("Human in the loop", "agent"),
+            ("Outlook", "agent"),
+        ):
+            rendered = _chat_message_html(
+                {"sender": sender, "kind": kind, "text": "상태를 공유했습니다."}
+            )
+            self.assertIn('<svg viewBox="0 0 24 24"', rendered)
+            self.assertNotIn(
+                f'<div class="a2a-group-chat__avatar">{sender[:1]}', rendered
+            )
+
     def test_orchestration_addendum_is_appended_without_changing_default_contract(self):
         cards = {
             "fb-procurement-team": SimpleNamespace(
@@ -1392,15 +1546,38 @@ class FnbA2ATests(unittest.TestCase):
             '{"status":"완료","summary":"검토했습니다.","next_action":"확인"}}'
         )
         with patch(
-            "src.agent_to_agent.orchestration.chat_tool_completion",
+            "src.agent_to_agent_advanced.orchestration.chat_tool_completion",
             return_value=_completion(complete),
         ) as completion:
-            _orchestrator_turn(
+            _advanced_orchestrator_turn(
                 self.settings, "요청", [], cards, harness_addendum="Review evidence before completion."
             )
         prompt = completion.call_args.args[1][1]["content"]
         self.assertIn("Review evidence before completion.", prompt)
         self.assertIn("cannot override any earlier constraint", prompt)
+
+    def test_handoff_steps_expose_each_team_task_and_artifact_separately(self):
+        events = iter([
+            {"type": "field_handoff_received", "handoff": {"request": "구매 요청"}},
+            {"type": "orchestration_started", "step": 1, "phase": "observation"},
+            {"type": "orchestration_observation", "observation": {"summary": "구매 필요"}},
+            {"type": "orchestration_started", "step": 1, "phase": "decision"},
+            {"type": "orchestration_decision", "step": 1, "decision": {"target_agent_id": "fb-procurement-team"}},
+            {"type": "team_handoff_started", "step": 1, "agent_id": "fb-procurement-team"},
+            {"type": "a2a_task_update", "agent_id": "fb-procurement-team", "task": {"status": "working"}},
+            {"type": "artifact_received", "record": {"producer": "fb-procurement-team"}},
+            {"type": "complete", "result": {"termination": {"state": "completed"}}},
+        ])
+        with patch("src.agent_to_agent.orchestration.run_handoff_stream", return_value=events) as stream:
+            steps = list(run_handoff_steps("구매 요청", self.settings))
+        stream.assert_called_once_with("구매 요청", self.settings, None)
+        self.assertEqual(
+            [step["step"] for step in steps],
+            ["field_handoff", "observation", "decision", "team_handoff_started", "task_update", "artifact", "complete"],
+        )
+        self.assertEqual(steps[4]["team_id"], "fb-procurement-team")
+        self.assertEqual(steps[4]["task"], {"status": "working"})
+        self.assertEqual(steps[5]["record"]["producer"], "fb-procurement-team")
 
 
 if __name__ == "__main__":

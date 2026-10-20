@@ -17,11 +17,33 @@ from .catalog import (
     SCENARIO_REQUESTS,
     SUBAGENT_BY_LABEL,
 )
-from .harness import adopt_variant, run_harness_experiment
 from .history import persist_a2a_conversation, persist_human_approval_action
 from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
 from .tools import schemas_for_tool_ids
+
+A2A_WORKFLOW_GRAPH_SVG = """
+<svg viewBox="0 0 1800 410" width="100%" role="img" aria-label="LLM-orchestrated A2A handoff workflow" xmlns="http://www.w3.org/2000/svg">
+  <style>.node{fill:#fff;stroke:#8ab4f8;stroke-width:2}.work{fill:#f8fbff;stroke:#4285f4;stroke-width:2}.end{fill:#e6f4ea;stroke:#34a853;stroke-width:2}.middleware{fill:#fffdf5;stroke:#f9ab00;stroke-width:2}.label{font:600 15px sans-serif;fill:#202124}.small{font:13px sans-serif;fill:#5f6368}.edge{fill:none;stroke:#5f6368;stroke-width:2;marker-end:url(#a2a-arrow)}</style>
+  <defs><marker id="a2a-arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="#5f6368"/></marker></defs>
+  <text x="25" y="32" class="label" style="font-size:18px">LLM-Orchestrated A2A Workflow</text>
+
+  <rect x="25" y="180" width="155" height="76" rx="12" class="node"/><text x="102" y="210" text-anchor="middle" class="label">User request</text><text x="102" y="232" text-anchor="middle" class="small">message</text>
+  <rect x="260" y="38" width="225" height="76" rx="12" class="work"/><text x="372" y="68" text-anchor="middle" class="label">ReAct Observation</text><text x="372" y="90" text-anchor="middle" class="small">artifacts · open decisions</text>
+  <rect x="265" y="165" width="230" height="104" rx="12" class="work"/><text x="380" y="199" text-anchor="middle" class="label">Orchestration Agent</text><text x="380" y="222" text-anchor="middle" class="small">LLM decide: delegate / handoff</text><text x="380" y="244" text-anchor="middle" class="small">/ complete</text>
+  <rect x="570" y="52" width="210" height="76" rx="12" class="work"/><text x="675" y="82" text-anchor="middle" class="label">Grounding &amp; Approval</text><text x="675" y="104" text-anchor="middle" class="small">LLM Tool Calling</text>
+  <rect x="570" y="180" width="180" height="76" rx="12" class="work"/><text x="660" y="210" text-anchor="middle" class="label">A2A Handoff</text><text x="660" y="232" text-anchor="middle" class="small">Message + envelope</text>
+  <rect x="825" y="155" width="225" height="126" rx="12" class="node"/><text x="937" y="188" text-anchor="middle" class="label">Selected A2A Team</text><text x="937" y="211" text-anchor="middle" class="small">LLM-selected Team Agent</text><text x="937" y="234" text-anchor="middle" class="small">internal sub-agents + tools</text><text x="937" y="257" text-anchor="middle" class="small">A2A Task updates</text>
+  <rect x="1125" y="180" width="190" height="76" rx="12" class="work"/><text x="1220" y="210" text-anchor="middle" class="label">Task &amp; Artifact</text><text x="1220" y="232" text-anchor="middle" class="small">TextPart · DataPart</text>
+  <rect x="1390" y="165" width="205" height="104" rx="12" class="middleware"/><text x="1492" y="199" text-anchor="middle" class="label">Middleware</text><text x="1492" y="222" text-anchor="middle" class="small">Task events · artifact received</text><text x="1492" y="244" text-anchor="middle" class="small">handoff audit</text>
+  <rect x="1665" y="180" width="110" height="76" rx="12" class="end"/><text x="1720" y="210" text-anchor="middle" class="label">Response</text><text x="1720" y="232" text-anchor="middle" class="small">to Field</text>
+
+  <path d="M180 218 H265" class="edge"/><text x="222" y="204" text-anchor="middle" class="small">Field Agent handoff</text><path d="M372 114 V165" class="edge"/><path d="M495 218 H570" class="edge"/><path d="M750 218 H825" class="edge"/><path d="M1050 218 H1125" class="edge"/><path d="M1315 218 H1390" class="edge"/><path d="M1595 218 H1665" class="edge"/>
+  <path d="M495 190 C525 190 530 90 570 90" class="edge"/><text x="526" y="122" class="small">tool call</text>
+  <path d="M675 128 C675 148 570 148 495 185" class="edge"/><text x="575" y="151" class="small">evidence</text>
+  <path d="M1492 269 C1492 355 380 355 380 269" class="edge"/><text x="935" y="352" text-anchor="middle" class="small">artifact event → observe → next ReAct decision</text>
+</svg>
+"""
 
 _A2A_GROUP_CHAT_SCROLL_JS = """
 () => {
@@ -302,10 +324,10 @@ def _agent_card_modal_html() -> str:
         '<dialog id="a2a-agent-cards-modal">'
         '<section class="a2a-topology">'
         '<header class="a2a-topology__modal-header">'
-        "<div><span>A2A 카드 정보</span><h2>Agent · Sub-agent · Tool</h2></div>"
+        "<div><span>03 · 기본 A2A 카드</span><h2>조직 Team · Sub-agent · Tool</h2></div>"
         '<button type="button" data-a2a-modal-close aria-label="닫기">×</button>'
         "</header>"
-        '<p class="a2a-topology__intro">Team Agent는 LLM으로 필요한 Sub-agent를 선택합니다. Tool은 표시된 역할에서만 선택적으로 호출되며, 모두 읽기 전용입니다.</p>'
+        '<p class="a2a-topology__intro">이 목록은 03 기본 A2A 실습 전용 Card입니다. Team Agent는 LLM으로 필요한 Sub-agent를 선택하고, Tool은 표시된 역할에서만 선택적으로 호출됩니다. 04 Advanced 실습의 Codex 통합 Agent는 이 목록에 포함되지 않습니다.</p>'
         '<div class="a2a-topology__layout">'
         f'<aside class="a2a-topology__sidebar">{"".join(team_buttons)}</aside>'
         f'<main class="a2a-topology__detail">{"".join(team_panels)}</main>'
@@ -661,6 +683,17 @@ def _human_approval_fallback_chat_message() -> dict[str, Any]:
         "text": (
             "Outlook 연결 또는 인증에 실패해 메일은 발송되지 않았습니다. "
             "아래에서 사람 검토 완료를 직접 기록할 수 있습니다."
+        ),
+    }
+
+
+def _human_approval_sent_chat_message() -> dict[str, Any]:
+    """Keep the explicit human decision visible after Graph delivery succeeds."""
+    return {
+        "sender": "Human in the loop",
+        "kind": "human",
+        "text": (
+            "사람 검토자가 발송을 명시적으로 승인했고 Microsoft Graph를 통해 메일을 전송했습니다."
         ),
     }
 
@@ -1090,16 +1123,17 @@ def _message_body_html(message: dict[str, Any]) -> str:
 
 def _chat_message_html(message: dict[str, Any]) -> str:
     """Render one immutable chat bubble that the browser can append safely."""
-    sender = html.escape(message.get("sender", "A2A Agent"))
+    raw_sender = str(message.get("sender", "A2A Agent"))
+    sender = html.escape(raw_sender)
     body = _message_body_html(message)
-    kind = message.get("kind", "agent")
+    kind = str(message.get("kind", "agent"))
     if kind == "system":
         return f'<div class="a2a-group-chat__system">{body}</div>'
     bubble_class = (
         " a2a-group-chat__bubble--streaming" if message.get("streaming") else ""
     )
     return f"""<div class="a2a-group-chat__row a2a-group-chat__row--{html.escape(kind)}">
-      <div class="a2a-group-chat__avatar">{sender[:1]}</div>
+      <div class="a2a-group-chat__avatar">{_message_avatar_html(raw_sender, kind)}</div>
       <div><div class="a2a-group-chat__sender">{sender}</div><div class="a2a-group-chat__bubble{bubble_class}">{body}</div></div>
     </div>"""
 
@@ -1108,10 +1142,11 @@ def _typing_bubbles_html(typing_agents: list[str] | None = None) -> str:
     """Render only the transient typing indicators."""
     bubbles = []
     for agent in typing_agents or []:
-        sender = html.escape(agent)
+        raw_sender = str(agent)
+        sender = html.escape(raw_sender)
         bubbles.append(
             f"""<div class="a2a-group-chat__row a2a-group-chat__row--typing">
-              <div class="a2a-group-chat__avatar">{sender[:1]}</div>
+              <div class="a2a-group-chat__avatar">{_message_avatar_html(raw_sender, "typing")}</div>
               <div><div class="a2a-group-chat__sender">{sender}</div><div class="a2a-group-chat__typing" role="status" aria-live="polite" aria-label="응답 생성 중"><i></i><i></i><i></i></div></div>
             </div>"""
         )
@@ -1135,13 +1170,85 @@ def _chat_payload_html(
     )
 
 
+_ROOM_AVATAR_ICONS = {
+    "fnb": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<path d="M7 3v7M10 3v7M7 7h3M8.5 10v11M16 3v18M16 3c3 1.5 3 6.5 0 8"/>'
+        "</svg>"
+    ),
+}
+
+
+_MESSAGE_AVATAR_ICONS = {
+    "department": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<path d="M4 21V5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5V21M2 21h20M8 7h1M12 7h1M8 11h1M12 11h1M9 21v-5h2v5"/>'
+        "</svg>"
+    ),
+    "orchestrator": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>'
+        '<circle cx="12" cy="18" r="2"/><path d="m7.7 7.2 3.1 8.1M16.3 7.2l-3.1 8.1M8 6h8"/>'
+        "</svg>"
+    ),
+    "agent": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 13h.01M16 13h.01M9 16h6"/>'
+        "</svg>"
+    ),
+    "human": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0M17 5l1.3 1.3L21 3.7"/>'
+        "</svg>"
+    ),
+    "mail": (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
+        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
+        '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'
+        "</svg>"
+    ),
+}
+
+
+def _message_avatar_html(sender: str, kind: str) -> str:
+    """Map every chat actor to a fixed role icon instead of an initial letter."""
+    normalized = f"{sender} {kind}".lower()
+    if kind == "field" or "요청부서" in normalized:
+        icon = "department"
+    elif "orchestration" in normalized or kind == "orchestrator":
+        icon = "orchestrator"
+    elif "outlook" in normalized or "mail" in normalized:
+        icon = "mail"
+    elif "human" in normalized or "reviewer" in normalized or "사람" in normalized:
+        icon = "human"
+    else:
+        icon = "agent"
+    return _MESSAGE_AVATAR_ICONS[icon]
+
+
+def _room_avatar_html(icon: str) -> str:
+    """Return a fixed, decorative icon; arbitrary HTML is never accepted."""
+    return _ROOM_AVATAR_ICONS.get(icon, _ROOM_AVATAR_ICONS["fnb"])
+
+
 def _group_chat_html(
     messages: list[dict[str, Any]],
     typing_agents: list[str] | None = None,
     *,
     room_title: str = "F&amp;B 업무 협업방",
     room_subtitle: str = "실시간 협업 대화",
-    avatar: str = "F",
+    avatar_icon: str = "fnb",
     status: str = "연결됨",
     extra_class: str = "",
 ) -> str:
@@ -1152,87 +1259,12 @@ def _group_chat_html(
         f'<section class="a2a-group-chat {extra_class}" data-message-count="{len(messages)}">'
         '<header class="a2a-group-chat__header">'
         '<div class="a2a-group-chat__room-title">'
-        f'<span class="a2a-group-chat__room-avatar">{html.escape(avatar)}</span>'
+        f'<span class="a2a-group-chat__room-avatar">{_room_avatar_html(avatar_icon)}</span>'
         f"<div><b>{room_title}</b><span>{room_subtitle}</span></div>"
         "</div>"
         f'<span class="a2a-group-chat__room-status">{html.escape(status)}</span>'
         "</header>"
         f'<div class="a2a-group-chat__messages">{bubbles}<div class="a2a-group-chat__typing-container">{typing}</div></div></section>'
-    )
-
-
-def _harness_messages(
-    experiment: dict[str, Any] | None = None,
-    adoption: dict[str, Any] | None = None,
-) -> list[dict[str, Any]]:
-    """Render the separate Harness² panel without exposing a candidate pre-selection."""
-    messages: list[dict[str, Any]] = [
-        {
-            "sender": "Harness²",
-            "kind": "system",
-            "text": "기준 실행 후 후보 2개와 조합 후보를 비교합니다. 채택 전에는 후보 지침을 공개하지 않습니다.",
-        }
-    ]
-    if not isinstance(experiment, dict):
-        return messages
-    comparison = experiment.get("comparison")
-    rows = comparison if isinstance(comparison, list) else []
-    messages.append(
-        _sectioned_chat_message(
-            "Harness Editor",
-            "agent",
-            ("실험 상태", "기준 실행을 재사용해 후보 2개와 조합 후보를 실행했습니다."),
-            ("비교 대상", f"익명 후보 {len(rows)}개"),
-            heading="Propose · Probe · Compose",
-        )
-    )
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        candidate_id = str(row.get("candidate_id") or "?")
-        requester_update = row.get("requester_update")
-        requester_update = requester_update if isinstance(requester_update, dict) else {}
-        team_order = row.get("team_order")
-        team_order = team_order if isinstance(team_order, list) else []
-        messages.append(
-            _sectioned_chat_message(
-                f"Probe {candidate_id}",
-                "agent",
-                ("실행 상태", row.get("status", "unknown")),
-                ("Team 순서", " → ".join(str(team) for team in team_order) or "없음"),
-                ("Artifact", str(row.get("artifact_count", 0))),
-                ("종료 상태", row.get("termination_state", "-")),
-                ("요청자 업데이트", requester_update.get("summary", "-")),
-                ("근거 요약", row.get("evidence_summaries", [])),
-                ("오류", row.get("error", "")),
-                heading="익명 실행 결과",
-            )
-        )
-    if isinstance(adoption, dict):
-        messages.append(
-            _sectioned_chat_message(
-                "Human Reviewer",
-                "field",
-                ("채택 후보", adoption.get("candidate_id", "-")),
-                ("하네스", adoption.get("title", "기준 하네스")),
-                ("생성 근거", adoption.get("rationale", "-")),
-                ("세션용 보조 지침", adoption.get("active_harness") or "기준 하네스 유지"),
-                heading="사람 채택 완료",
-            )
-        )
-    return messages
-
-
-def _harness_chat_html(
-    experiment: dict[str, Any] | None = None, adoption: dict[str, Any] | None = None
-) -> str:
-    return _group_chat_html(
-        _harness_messages(experiment, adoption),
-        room_title="Harness² 실험방",
-        room_subtitle="런타임 오케스트레이션 비교",
-        avatar="H",
-        status="세션 전용",
-        extra_class="a2a-harness-chat",
     )
 
 
@@ -1288,7 +1320,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         request_department: str | None = None,
         previous_approvals: list[dict[str, Any]] | None = None,
         previous_outcome: dict[str, Any] | None = None,
-        active_harness: str | None = None,
     ):
         clean_request = request.strip() if isinstance(request, str) else ""
         if not clean_request:
@@ -1313,11 +1344,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             )
 
         try:
-            for event in run_handoff_stream(
-                clean_request,
-                settings=settings,
-                harness_addendum=active_harness or None,
-            ):
+            for event in run_handoff_stream(clean_request, settings=settings):
                 kind = event["type"]
                 if kind == "field_handoff_received":
                     event_log.append({"event": "field_handoff_received"})
@@ -1558,11 +1585,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
 
         updated_draft = {**draft, "state": "sent", "send_result": result}
         normalized[pending_index] = updated_draft
-        mail_message = {
-            "sender": "Outlook",
-            "kind": "system",
-            "text": "검토자가 메일 발송을 승인했고 Outlook으로 전송했습니다.",
-        }
+        mail_message = _human_approval_sent_chat_message()
         updated_messages = [
             *(messages or []),
             mail_message,
@@ -1637,39 +1660,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         ]
         return approval_output(normalized, updated_messages)
 
-    def run_harness_panel(
-        request: str | None, baseline_result: dict[str, Any] | None
-    ):
-        """Run the separate learning loop from the last completed A2A result."""
-        clean_request = request.strip() if isinstance(request, str) else ""
-        if not clean_request or not isinstance(baseline_result, dict):
-            raise gr.Error("먼저 왼쪽 협업방에서 기준 A2A 실행을 완료하세요.")
-        experiment = run_harness_experiment(
-            clean_request, baseline_result=baseline_result, settings=settings
-        )
-        choices = [
-            str(row.get("candidate_id"))
-            for row in experiment.get("comparison", [])
-            if isinstance(row, dict) and row.get("status") == "ok"
-        ]
-        return (
-            _harness_chat_html(experiment),
-            experiment,
-            gr.update(choices=choices, value=None),
-        )
-
-    def adopt_harness_panel(
-        experiment: dict[str, Any] | None, candidate_id: str | None
-    ):
-        if not isinstance(experiment, dict) or not isinstance(candidate_id, str):
-            raise gr.Error("오른쪽 비교 결과에서 성공한 후보를 선택하세요.")
-        adoption = adopt_variant(experiment, candidate_id)
-        return (
-            _harness_chat_html(experiment, adoption),
-            experiment,
-            adoption["active_harness"],
-        )
-
     css = """
     .orchestration-view{padding:16px;border:1px solid #d7e1ee;border-radius:14px;background:#f8fbff}.orchestration-view h3{margin:0 0 12px;color:#174ea6}.actor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.actor{padding:11px;border:1px solid #d9e2f3;border-radius:10px;background:#fff}.actor b{display:block;color:#174ea6;font-size:13px}.actor span{display:inline-block;margin-top:6px;padding:2px 6px;border-radius:99px;background:#eef1f4;color:#5f6368;font-size:10px}.actor p{margin:7px 0 0;color:#4b5f78;font-size:11px}.actor-working{border:2px solid #f0a500}.actor-working span{background:#fff1cc;color:#9a6700}.actor-completed{border-color:#a9d8b6}.actor-completed span{background:#e8f5e9;color:#137333}.actor-selected{border-color:#9fc3f5}.flow-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid #d9e2f3;font-size:12px;color:#374151}.flow-grid ul{margin:6px 0;padding-left:18px}.agent-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.agent-card{padding:10px;border:1px solid #d9e2f3;border-radius:9px;font-size:12px}.agent-card p{margin:6px 0;color:#4b5f78}.agent-card small{color:#667085}.a2a-chat-shell{gap:0!important;overflow:hidden;border:1px solid #92aeca;border-radius:14px;background:#b2c7d9}.a2a-chat-shell #a2a-group-chat{position:relative;margin:0!important;border:0!important}.a2a-chat-shell .a2a-group-chat{border:0;border-radius:0}.a2a-chat-composer{margin:0!important;padding:8px 10px 10px;background:#f6f8fa;border:0!important;border-top:1px solid #92aeca!important}.a2a-chat-composer>div{margin:0!important}.a2a-chat-composer textarea{min-height:42px!important;background:#fff}.a2a-group-chat{border:1px solid #92aeca;border-radius:14px;overflow:hidden;background:#b2c7d9;overflow-anchor:none}.a2a-group-chat__header{display:flex;justify-content:space-between;gap:8px;padding:11px 14px;background:#91abc2;color:#fff;font-size:13px}.a2a-group-chat__header span{font-size:11px;opacity:.95}.a2a-group-chat__messages{height:520px;overflow-y:auto;padding:14px;overflow-anchor:none}.a2a-group-chat__new-message{position:absolute;z-index:3;bottom:14px;left:50%;transform:translateX(-50%);padding:7px 12px;border:0;border-radius:999px;background:#425f79;color:#fff;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(40,58,74,.28);cursor:pointer}.a2a-group-chat__new-message:hover{background:#314b64}.a2a-group-chat__row{display:flex;gap:8px;margin:0 0 12px;align-items:flex-start}.a2a-group-chat__avatar{display:grid;place-items:center;flex:none;width:31px;height:31px;border-radius:50%;background:#fff;color:#4d657d;font-size:12px;font-weight:700}.a2a-group-chat__sender{margin:1px 0 4px;color:#314b64;font-size:11px;font-weight:700}.a2a-group-chat__bubble{max-width:680px;padding:9px 11px;border-radius:3px 12px 12px 12px;background:#fff;color:#252525;font-size:13px;line-height:1.5;box-shadow:0 1px 1px rgba(0,0,0,.08)}.a2a-group-chat__bubble--streaming::after{content:"▍";display:inline-block;margin-left:2px;color:#4d657d;animation:a2a-blink .75s step-end infinite}.a2a-group-chat__row--typing .a2a-group-chat__typing{display:flex;gap:4px;padding:10px 12px;border-radius:3px 12px 12px 12px;background:#fff}.a2a-group-chat__typing i{width:6px;height:6px;border-radius:50%;background:#8093a6;animation:a2a-typing 1.1s infinite}.a2a-group-chat__typing i:nth-child(2){animation-delay:.16s}.a2a-group-chat__typing i:nth-child(3){animation-delay:.32s}@keyframes a2a-typing{0%,60%,100%{transform:translateY(0);opacity:.42}30%{transform:translateY(-4px);opacity:1}}@keyframes a2a-blink{50%{opacity:0}}.a2a-group-chat__row--orchestrator{justify-content:flex-end}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:2;background:#fee500;color:#5b4d00}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-radius:12px 3px 12px 12px;background:#fee500}.a2a-group-chat__row--field .a2a-group-chat__avatar{background:#dfeeff;color:#174ea6}.a2a-group-chat__system{width:max-content;max-width:90%;margin:5px auto 12px;padding:5px 9px;border-radius:999px;background:rgba(65,88,111,.32);color:#fff;font-size:11px;text-align:center}@media(max-width:700px){.flow-grid,.agent-cards{grid-template-columns:1fr}.a2a-group-chat__header span{display:none}.a2a-group-chat__messages{height:440px}.a2a-group-chat__bubble{max-width:calc(100vw - 130px)}}
     """
@@ -1706,9 +1696,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     css += """
     .a2a-group-chat__profitability{margin-top:10px;padding-top:10px;border-top:1px solid #dbe3e9}.a2a-group-chat__profitability-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px;color:#405e75;font-size:11px}.a2a-group-chat__profitability-heading b{font-size:12px}.a2a-group-chat__profitability-heading span{color:#718699;font-size:10px}.a2a-group-chat__financial-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid #d9e4ec;border-radius:8px;background:#fff;color:#394b5a;font-size:9px;line-height:1.35}.a2a-group-chat__financial-table th,.a2a-group-chat__financial-table td{padding:5px 4px;border-right:1px solid #e5edf2;border-bottom:1px solid #e5edf2;vertical-align:top;overflow-wrap:anywhere;word-break:break-word}.a2a-group-chat__financial-table th:last-child,.a2a-group-chat__financial-table td:last-child{border-right:0}.a2a-group-chat__financial-table tbody tr:last-child th,.a2a-group-chat__financial-table tbody tr:last-child td{border-bottom:0}.a2a-group-chat__financial-table thead th{background:#eaf2f7;color:#506a80;font-size:8px;font-weight:800;text-align:left}.a2a-group-chat__financial-table tbody th{background:#f7fafc;color:#3e5e77;font-size:10px;text-align:left}.a2a-group-chat__profitability-detail{margin-top:8px}.a2a-group-chat__profitability-detail summary{color:#506a80;font-size:10px;font-weight:800;cursor:pointer}.a2a-group-chat__profitability-detail[open] summary{margin-bottom:7px}.a2a-group-chat__financial-table--monthly{font-size:8px}.a2a-group-chat__financial-table--monthly thead th{font-size:8px}.a2a-group-chat__profitability-boundary{margin:7px 0 0;color:#748795;font-size:9px;line-height:1.4}
     """
-    css += """
-    .a2a-dual-chat-layout{align-items:stretch!important;gap:16px!important}.a2a-dual-chat-layout>.a2a-chat-shell{min-width:0!important}.a2a-harness-shell{background:#e7e4f5!important}.a2a-harness-shell .a2a-group-chat{border-radius:16px!important;background:#e7e4f5!important}.a2a-harness-shell .a2a-group-chat__header{background:#e2dcff!important;color:#322965!important}.a2a-harness-shell .a2a-group-chat__room-avatar{background:#5d4d9b!important;color:#fff!important}.a2a-harness-shell .a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar),.a2a-harness-shell .a2a-group-chat__room-status{color:#5d4d8b!important}.a2a-harness-shell .a2a-group-chat__room-status::before{background:#806ad0!important}.a2a-harness-shell .a2a-group-chat__messages{height:520px;background:#e7e4f5!important}.a2a-harness-shell .a2a-group-chat__section{background:#f5f2ff!important}.a2a-harness-shell .a2a-group-chat__title{color:#55438f!important}.a2a-harness-controls{margin:0!important;padding:10px 12px 0!important;background:#e7e4f5}.a2a-harness-controls button{width:100%;border-color:#7660b9!important;background:#fff!important;color:#4c3e84!important;font-weight:800!important}.a2a-harness-shell .gr-dropdown{margin:0!important;padding:8px 12px 0!important;background:#e7e4f5}.a2a-harness-shell>button{margin:0!important;padding:10px 12px 12px!important;border-radius:0 0 16px 16px!important;background:#5d4d9b!important}.a2a-harness-shell>button:hover{background:#4b3d81!important}@media(max-width:900px){.a2a-dual-chat-layout{flex-direction:column!important}.a2a-dual-chat-layout>.a2a-chat-shell{width:100%!important}.a2a-harness-shell .a2a-group-chat__messages{height:400px!important}}
-    """
     with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
         with gr.Row(elem_id="a2a-page-toolbar"):
             gr.Button(
@@ -1718,8 +1705,8 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 scale=0,
                 min_width=0,
             )
-        with gr.Row(elem_classes=["a2a-dual-chat-layout"]):
-            with gr.Column(scale=3, elem_classes=["a2a-chat-shell"]):
+        with gr.Row():
+            with gr.Column(elem_classes=["a2a-chat-shell"]):
                 gr.HTML(
                     _group_chat_html([]),
                     label="Agent handoff conversation",
@@ -1735,21 +1722,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                     elem_classes=["a2a-chat-composer"],
                     container=False,
                 )
-            with gr.Column(scale=2, elem_classes=["a2a-chat-shell", "a2a-harness-shell"]):
-                harness_chat = gr.HTML(
-                    _harness_chat_html(),
-                    label="Harness² comparison conversation",
-                    elem_id="a2a-harness-chat",
-                )
-                with gr.Row(elem_classes=["a2a-harness-controls"]):
-                    harness_run_button = gr.Button("Harness² 비교 실행", variant="secondary")
-                harness_choice = gr.Dropdown(
-                    choices=[],
-                    label="사람 채택 후보",
-                    interactive=True,
-                    info="익명 비교 결과의 성공한 후보만 선택할 수 있습니다.",
-                )
-                harness_adopt_button = gr.Button("선택 후보를 세션에 채택", variant="primary")
         chat_payload = gr.HTML(
             "",
             elem_id="a2a-chat-payload",
@@ -1771,8 +1743,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             SCENARIO_REQUEST_DEPARTMENTS["기존 설비 소모품 보충 구매"]
         )
         last_outcome = gr.State(None)
-        harness_experiment = gr.State(None)
-        active_harness = gr.State("")
         with (
             gr.Accordion("업무 시나리오", open=False),
             gr.Row(
@@ -1819,7 +1789,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 requester_department,
                 approval_state,
                 last_outcome,
-                active_harness,
             ],
             outputs=workflow_outputs,
             queue=True,
@@ -1836,20 +1805,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             cancel_email_approval,
             inputs=[approval_state, chat_history],
             outputs=approval_outputs,
-            queue=False,
-            scroll_to_output=False,
-        )
-        harness_run_button.click(
-            run_harness_panel,
-            inputs=[request, last_outcome],
-            outputs=[harness_chat, harness_experiment, harness_choice],
-            queue=True,
-            scroll_to_output=False,
-        )
-        harness_adopt_button.click(
-            adopt_harness_panel,
-            inputs=[harness_experiment, harness_choice],
-            outputs=[harness_chat, harness_experiment, active_harness],
             queue=False,
             scroll_to_output=False,
         )
