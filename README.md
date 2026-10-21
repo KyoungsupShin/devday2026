@@ -6,19 +6,21 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 ### 🎬 Agent Patterns 미리보기
 
+대표 협업 흐름을 01~03 순서로 미리 봅니다. 실제 Hands-on 단계와 노트북 번호는 아래 학습 로드맵의 01~04 구성을 따릅니다.
+
 <strong>01 · 병렬 Agent Workflow</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/01_agent_workflow.gif" alt="병렬 Agent Workflow 미리보기" width="100%"><br>
 독립 Specialist Agent의 병렬 실행과 Synthesis 결과를 확인합니다.
 
 <br>
 
-<strong>03 · Agent-to-Agent 협업</strong><br>
+<strong>02 · Agent-to-Agent 협업</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
 요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
 
 <br>
 
-<strong>04 · Agent-to-Agent 협업 with Expanding</strong><br>
+<strong>03 · Agent-to-Agent 협업 with Expanding</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/04_agent_to_agent_advanced.gif" alt="Advanced Agent-to-Agent 협업과 Harness Labs 개선안 미리보기" width="100%"><br>
 부서별 A2A handoff와 최종 승인 대기 응답을 확인하고, Harness Labs가 실행 로그 기반 개선안을 제안합니다.
 
