@@ -4,7 +4,7 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 > 각 노트북은 화면과 trace를 보여 주고, 실제 로직은 해당 단계의 `src/`에 있습니다.
 
-### 🎬 15초 Agent Patterns 미리보기
+### 🎬 Agent Patterns 미리보기
 
 <strong>01 · 병렬 Agent Workflow</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/01_agent_workflow.gif" alt="병렬 Agent Workflow 미리보기" width="100%"><br>
@@ -12,9 +12,21 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 <br>
 
+<strong>02 · Agent Loop &amp; MCP</strong><br>
+<img src="4_agent_patterns/assets/thumbnails/gifs/02_agent_loop_mcp.gif" alt="Agent Loop과 MCP Tool Calling 미리보기" width="100%"><br>
+관찰·도구 호출·재관찰을 반복하는 Agent loop와 Specialist Agent의 실행 상태를 확인합니다.
+
+<br>
+
 <strong>03 · Agent-to-Agent 협업</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
 요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
+
+<br>
+
+<strong>04 · Agent-to-Agent 협업 with Expanding</strong><br>
+<img src="4_agent_patterns/assets/thumbnails/gifs/04_agent_to_agent_advanced.gif" alt="Advanced Agent-to-Agent 협업과 Harness Labs 개선안 미리보기" width="100%"><br>
+부서별 A2A handoff와 최종 승인 대기 응답을 확인하고, Harness Labs가 실행 로그 기반 개선안을 제안합니다.
 
 ---
 
@@ -182,6 +194,11 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 <details>
 <summary><strong>04 · Agent Patterns</strong> — Workflow·Tool Calling·A2A</summary>
 
+<p align="right">
+  <a href="4_agent_patterns/notebooks/04_agent_to_agent_advanced.ipynb">
+    <img src="4_agent_patterns/assets/thumbnails/04_agent_to_agent_advanced_workflow.svg" alt="Advanced A2A workflow" width="460">
+  </a>
+</p>
 
 | 노트북 | 협업 패턴 | 확인 포인트 |
 | --- | --- | --- |
