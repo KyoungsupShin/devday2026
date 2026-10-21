@@ -1,6 +1,6 @@
 # 03 · Gen AI Hub Services
 
-AI Core Orchestration과 document grounding을 서비스 단위로 확인합니다. 문서 원본 보관과 검색 근거를 분리해, 답변이 어떤 근거를 참조했는지 확인하는 단계입니다.
+Orchestration, Grounding, RPT 서비스를 확인하는 단계입니다.
 
 > 공통 환경 설정과 JupyterLab 실행은 [루트 README](../README.md)에서 진행합니다.
 
@@ -17,7 +17,7 @@ AI Core Orchestration과 document grounding을 서비스 단위로 확인합니�
 | 고정 deployment 사용 | 선택적으로 `AICORE_ORCHESTRATION_DEPLOYMENT_URL` |
 | Object Storage 연계 | 선택적으로 Object Storage 접속 정보와 bucket |
 
-Grounding 저장소가 비어 있거나 조회에 실패한 상태는 답변 근거가 없는 상태와 구분해서 확인합니다.
+Grounding에는 문서 저장소가 필요합니다.
 
 </details>
 
@@ -32,7 +32,7 @@ Grounding 저장소가 비어 있거나 조회에 실패한 상태는 답변 근
 | [02_grounding.ipynb](notebooks/02_grounding.ipynb) | 인덱싱된 문서 chunk를 근거로 질의하고, 답변의 참조 근거를 확인합니다. | 생성된 답변과 실제로 참조한 chunk를 분리해 검토합니다. |
 | [03_rpt_risk_classification.ipynb](notebooks/03_rpt_risk_classification.ipynb) | ID를 제거한 교육용 신용위험 표 데이터를 SAP RPT로 80/20 holdout 평가하고 한 건을 분류합니다. | RPT 요청에 전달되는 feature·label, 성능 지표, 감사용 집계를 분리해 검토합니다. |
 
-먼저 Orchestration의 서비스 호출 흐름을 이해한 뒤 Grounding에서 문서 근거가 답변으로 연결되는 방식을 확인하세요. RPT 실습은 별도 학습·deployment 생성 없이 RUNNING foundation model에 읽기 전용 예측만 요청합니다. 평가 결과 CSV는 `results/rpt_risk/`에 저장할 수 있으며, 실제 고객 데이터나 식별자는 저장하지 않습니다.
+Orchestration, Grounding, RPT 순으로 실행하세요. RPT는 읽기 전용 예측을 사용합니다.
 
 ```bash
 .venv/bin/python main.py rpt-evaluate
@@ -47,7 +47,7 @@ Grounding 저장소가 비어 있거나 조회에 실패한 상태는 답변 근
 <details>
 <summary><strong>🧩 선택 기능: Object Storage → Grounding</strong></summary>
 
-Grounding 노트북의 Object Storage 연계는 UTF-8 Markdown 원본을 Object Storage에 보관하고, 같은 텍스트를 선택한 vector repository에 인덱싱합니다. 질의는 Object Storage 원본이 아니라 인덱싱된 vector chunk를 근거로 수행됩니다. Grounding UI에서 문서를 삭제해도 원본 object는 유지될 수 있음을 확인하세요.
+원본 문서는 Object Storage에 보관하고, Grounding은 인덱싱된 문서를 사용합니다.
 
 </details>
 
@@ -56,11 +56,8 @@ Grounding 노트북의 Object Storage 연계는 UTF-8 Markdown 원본을 Object 
 <details>
 <summary><strong>✅ 이 단계의 완료 기준</strong></summary>
 
-- 등록된 Orchestration을 호출하고 서비스 응답을 확인할 수 있습니다.
-- Grounding 답변과 참조 문서 근거를 함께 검토할 수 있습니다.
-- 교육용 risk 데이터의 RPT 분류 지표와 감사용 그룹 집계를 자동 신용 의사결정과 구분해 검토할 수 있습니다.
-- RPT에 feature·label만 전달하고, ID와 감사 속성이 요청 경계를 넘지 않는 것을 확인할 수 있습니다.
-- 저장소 미설정·조회 실패를 근거 있는 답변처럼 표시하지 않습니다.
+- Orchestration 응답과 Grounding 문서 근거를 확인합니다.
+- RPT 결과는 교육용 데이터로 검토합니다.
 
 테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.
 
