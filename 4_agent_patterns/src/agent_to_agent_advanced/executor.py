@@ -128,6 +128,13 @@ def _json_object(
         contract=contract,
         context=json.dumps(context, ensure_ascii=False),
     )
+    overlay = context.get("harness_overlay")
+    if isinstance(overlay, str) and overlay.strip():
+        prompt += (
+            "\n\n# Human-approved Runtime Harness Revision\n"
+            + overlay.strip()
+            + "\nApply it only within the existing role, Tool allow-list, and read-only safety boundary."
+        )
     messages = [
         {
             "role": "system",
@@ -362,6 +369,7 @@ def _plan_delegations(
         "grounding": payload.get("grounding"),
         "artifacts": payload.get("artifacts", []),
         "orchestration_observations": payload.get("orchestration_observations", []),
+        "harness_overlay": payload.get("harness_overlay", ""),
         "available_subagents": available_subagents,
     }
     contract = get_prompt("executor.delegation_contract")
@@ -432,6 +440,7 @@ def _run_team(
             "grounding": payload.get("grounding"),
             "artifacts": payload.get("artifacts", []),
             "orchestration_observations": payload.get("orchestration_observations", []),
+            "harness_overlay": payload.get("harness_overlay", ""),
         }
         result = _json_object(
             settings,
@@ -463,6 +472,7 @@ def _run_team(
             "grounding": payload.get("grounding"),
             "artifacts": payload.get("artifacts", []),
             "orchestration_observations": payload.get("orchestration_observations", []),
+            "harness_overlay": payload.get("harness_overlay", ""),
             "delegation_plan": plan,
             "delegated_findings": evidence,
         },

@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "revisions": [
+    {
+      "revision_id": "e66f720e-86c8-4ba5-b64c-35de0e6794b9",
+      "domain": "hana-sql",
+      "parent_revision_id": null,
+      "trace_id": "46c45a1c-406c-4915-ac82-89810e78c75c",
+      "request": "SAP HANA의 고객 주문 테이블에서 고객별 주문 건수와 순 주문금액 상위 10개를 조회해 주세요.",
+      "title": "통화별 상위 10개 해석 지침 보강",
+      "recommended": true,
+      "rationale": "현재 실행처럼 환율이 없을 때 통화별 집계를 허용하되, 전체 행 수가 10개를 초과하는 이유와 ‘통화별 상위 10개’라는 해석을 결과에 명시하도록 하는 가장 좁고 가역적인 개선입니다.",
+      "evidence": [
+        "12건이 반환되었지만 통화별 상위 10개라는 집계 방식이 결과 요약에 명시적으로 구분되어 있지 않다.",
+        "환율 규칙 부재로 통화 간 비교를 하지 않았다."
+      ],
+      "changes": [
+        {
+          "component": "agent_prompt",
+          "target": "codex-sql-generator-agent",
+          "instruction": "고객별 상위 집계 요청에서 통화가 여러 개이고 공통 환율이 없으면 통화별로 집계하되, SQL 설명과 결과 요약에 ‘통화별 상위 10개’임을 명시하고 전체 반환 행 수가 10개를 초과할 수 있음을 설명한다. 통화 간 순위는 환율 기준 없이는 산출하지 않는다. 조회는 계속 읽기 전용으로 유지한다."
+        }
+      ],
+      "comment": "",
+      "impact": {
+        "expected_benefit": "상위 10개가 전체 기준인지 통화별 기준인지 명확해져 결과 오해와 재조회 가능성을 줄인다.",
+        "mandatory_controls": "SAP HANA 조회는 계속 읽기 전용으로 수행하고, 승인·안전·품질·감사 통제를 유지한다.",
+        "build_required": false
+      },
+      "build_required": false,
+      "build_status": "runtime_ready",
+      "status": "rolled_back",
+      "created_at": "2026-10-21T06:47:13+00:00"
+    },
+    {
+      "revision_id": "cbcb146c-8916-42d9-b60d-7abe99d408cb",
+      "domain": "hana-sql",
+      "parent_revision_id": null,
+      "trace_id": "46c45a1c-406c-4915-ac82-89810e78c75c",
+      "request": "SAP HANA의 고객 주문 테이블에서 고객별 주문 건수와 순 주문금액 상위 10개를 조회해 주세요.",
+      "title": "통화별 상위 10개 해석 지침 보강",
+      "recommended": true,
+      "rationale": "현재 실행처럼 환율이 없을 때 통화별 집계를 허용하되, 전체 행 수가 10개를 초과하는 이유와 ‘통화별 상위 10개’라는 해석을 결과에 명시하도록 하는 가장 좁고 가역적인 개선입니다.",
+      "evidence": [
+        "12건이 반환되었지만 통화별 상위 10개라는 집계 방식이 결과 요약에 명시적으로 구분되어 있지 않다.",
+        "환율 규칙 부재로 통화 간 비교를 하지 않았다."
+      ],
+      "changes": [
+        {
+          "component": "agent_prompt",
+          "target": "codex-sql-generator-agent",
+          "instruction": "고객별 상위 집계 요청에서 통화가 여러 개이고 공통 환율이 없으면 통화별로 집계하되, SQL 설명과 결과 요약에 ‘통화별 상위 10개’임을 명시하고 전체 반환 행 수가 10개를 초과할 수 있음을 설명한다. 통화 간 순위는 환율 기준 없이는 산출하지 않는다. 조회는 계속 읽기 전용으로 유지한다."
+        }
+      ],
+      "comment": "",
+      "impact": {
+        "expected_benefit": "상위 10개가 전체 기준인지 통화별 기준인지 명확해져 결과 오해와 재조회 가능성을 줄인다.",
+        "mandatory_controls": "SAP HANA 조회는 계속 읽기 전용으로 수행하고, 승인·안전·품질·감사 통제를 유지한다.",
+        "build_required": false
+      },
+      "build_required": false,
+      "build_status": "runtime_ready",
+      "status": "rolled_back",
+      "created_at": "2026-10-21T06:54:04+00:00"
+    },
+    {
+      "revision_id": "77c902e1-8b53-4987-bcf8-8bc2cbfcf08c",
+      "domain": "procurement",
+      "parent_revision_id": null,
+      "trace_id": "6ed70344-9be0-458f-a326-df8cca9df850",
+      "request": "딸기 농축액을 추가 발주해 주세요.",
+      "title": "생산계획-자재검증 우선 지침",
+      "recommended": true,
+      "rationale": "현재의 보수적 처리를 유지하면서, 추가 발주 수량을 제시하기 전에 생산계획 유지 여부와 투입·품질 확인 상태를 필수 대조하도록 하는 가장 좁고 되돌릴 수 있는 개선입니다.",
+      "evidence": [
+        "구매팀은 300KG 부족을 발주 검토 근거로 제시했지만 발주 확정은 하지 않음",
+        "제조계획팀은 15,000EA 계획 수정안과 투입·품질 근거가 미확정이라고 보고함"
+      ],
+      "changes": [
+        {
+          "component": "agent_prompt",
+          "target": "procurement orchestration agent",
+          "instruction": "추가 발주 검토 시 먼저 생산계획의 적용 버전과 유지 여부를 확인하고, 해당 계획의 자재 가용량·예정 입고·투입 가능 여부·품질 확인 상태를 대조하라. 이 항목 중 하나라도 미확정이면 부족량은 검토 근거로만 표시하고 발주 수량이나 외부 발주를 확정하지 말라. 최종 결과에는 확인된 부족량, 발주 후보 수량, 미확정 항목, 권한 있는 담당자의 결정과 필요한 승인을 분리해 제시하라."
+        },
+        {
+          "component": "system_prompt",
+          "target": "human-review",
+          "instruction": "Human reviewer comment: 수요·재고·납기 근거를 먼저 명확히 정리해 주세요."
+        }
+      ],
+      "comment": "수요·재고·납기 근거를 먼저 명확히 정리해 주세요.",
+      "impact": {
+        "expected_benefit": "생산계획 변경만으로 발주 수량이 확정되는 것을 방지하고, 부족량·발주 후보 수량·잔여 불확실성을 일관되게 구분할 수 있습니다.",
+        "mandatory_controls": "권한 있는 담당자의 명시적 결정, 구매 승인, 외부 발주 전 검토 및 감사 기록을 유지하며 읽기 전용 경계를 변경하지 않습니다.",
+        "build_required": false
+      },
+      "build_required": false,
+      "build_status": "runtime_ready",
+      "status": "active",
+      "created_at": "2026-10-21T07:36:33+00:00"
+    },
+    {
+      "revision_id": "79845d34-c7f8-45d9-bbdd-89a1beca3c5a",
+      "domain": "hana-sql",
+      "parent_revision_id": null,
+      "trace_id": "f64f7e25-b920-4ad5-9ada-bd8d089f1610",
+      "request": "SAP HANA의 고객 주문 테이블에서 고객별 주문 건수와 순 주문금액 상위 10개를 조회해 주세요.",
+      "title": "다중 통화 사전 확인",
+      "recommended": true,
+      "rationale": "고객별 금액 순위를 산출하기 전에 통화가 둘 이상인지 확인하고, 비교 기준이 없으면 조회 실행 전에 환율 기준과 기준일을 한 번만 질문하도록 하여 부분 결과를 전체 순위처럼 반환하는 문제를 줄입니다.",
+      "evidence": [
+        "현재 실행은 USD와 EUR 결과를 확인했지만 통화 간 금액을 비교하지 않았습니다.",
+        "환율 기준과 기준일이 없어 전체 상위 10개를 확정하지 못했습니다."
+      ],
+      "changes": [
+        {
+          "component": "agent_prompt",
+          "target": "codex-sql-generator-agent",
+          "instruction": "고객별 금액 순위 요청 시 집계 대상 통화를 먼저 확인한다. 통화가 하나이면 해당 통화의 상위 10개를 산출한다. 통화가 둘 이상이면 공식적으로 검증된 환율 규칙과 기준일이 있는지 확인하고, 없으면 SQL 실행 전에 사용자가 환율 기준·기준일 또는 통화별 순위 중 하나를 선택하도록 한 번만 질문한다. 검증된 환율 규칙 없이 통화 간 금액을 비교하거나 전체 상위 10개라고 표현하지 않는다. 결과에는 통화, 기준일, 데이터 범위, 주문 건수와 순 주문금액을 명시한다."
+        },
+        {
+          "component": "system_prompt",
+          "target": "human-review",
+          "instruction": "Human reviewer comment: 선택한 개선안은 기존 승인·읽기 전용 경계를 유지해야 합니다."
+        }
+      ],
+      "comment": "선택한 개선안은 기존 승인·읽기 전용 경계를 유지해야 합니다.",
+      "impact": {
+        "expected_benefit": "통화 비교가 필요한 경우 요청 범위를 실행 전에 확정하고, 통화별 결과와 전체 통합 결과를 혼동하지 않게 합니다.",
+        "mandatory_controls": "읽기 전용 조회, 실제 스키마 확인, 결과 검증, 감사 추적 및 기존 안전·승인 통제를 유지합니다.",
+        "build_required": false
+      },
+      "build_required": false,
+      "build_status": "runtime_ready",
+      "status": "rolled_back",
+      "created_at": "2026-10-21T07:39:50+00:00"
+    }
+  ],
+  "active_by_domain": {
+    "procurement": "77c902e1-8b53-4987-bcf8-8bc2cbfcf08c"
+  }
+}

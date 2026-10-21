@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from typing import Any, Callable
 
 from lab_common.config import load_settings
+from src.reranker.demo_cases import ORDER_RISK_DEMO_CASES
 
 
 def _gradio():
@@ -115,33 +116,94 @@ def build_chat_ui(
     return app
 
 
-def build_embedding_ui(embedding_runner: Callable[..., dict[str, Any]]):
-    """Create an embedding comparison view backed by one public core API."""
+def build_embedding_ui(comparison_cluster_runner: Callable[..., dict[str, Any]]):
+    """Create a comparison UI with a session-local interactive cluster chart."""
     gr = _gradio()
-    load_settings()  # Loads the repository .env before reading EMBED_MODEL for the view.
+    load_settings()
     configured_model = os.getenv("EMBED_MODEL", "amazon--titan-embed-image")
 
-    def compare(text_a: str, text_b: str) -> dict[str, Any]:
-        if not text_a.strip() or not text_b.strip():
-            return {"error": "비교할 두 텍스트를 모두 입력하세요."}
+    def cluster_view(state: object) -> object:
+        entries = state.get("entries", []) if isinstance(state, dict) else []
+        if not entries:
+            return None
         try:
-            return embedding_runner(
-                texts=[text_a, text_b],
-                settings=load_settings(),
-                model=None,
+            import plotly.graph_objects as go
+        except ImportError as error:
+            raise RuntimeError(
+                "2D cluster 표시에 plotly가 필요합니다. requirements.txt를 다시 설치하세요."
+            ) from error
+
+        palette = ["#5B8FF9", "#61DDAA", "#F6BD16", "#7262FD", "#E8684A"]
+        figure = go.Figure()
+        for cluster_id in sorted({int(entry["cluster"]) for entry in entries}):
+            members = [entry for entry in entries if int(entry["cluster"]) == cluster_id]
+            figure.add_trace(
+                go.Scatter(
+                    x=[float(entry["x"]) for entry in members],
+                    y=[float(entry["y"]) for entry in members],
+                    mode="markers+text",
+                    name=f"Cluster {cluster_id}",
+                    text=[str(entry["text"]).replace("\n", " ")[:24] for entry in members],
+                    textposition="top center",
+                    textfont={"size": 11, "color": "#344054"},
+                    customdata=[[int(entry["index"]), str(entry["text"])] for entry in members],
+                    hovertemplate=(
+                        "<b>%{customdata[1]}</b><br>Entry %{customdata[0]} · Cluster "
+                        + str(cluster_id)
+                        + "<br>UMAP 1 %{x:.3f}<br>UMAP 2 %{y:.3f}<extra></extra>"
+                    ),
+                    marker={
+                        "size": 15, "color": palette[cluster_id % len(palette)],
+                        "line": {"color": "#FFFFFF", "width": 2}, "opacity": 0.95,
+                    },
+                )
             )
+        figure.update_layout(
+            template="plotly_white", height=460,
+            margin={"l": 50, "r": 30, "t": 64, "b": 48},
+            paper_bgcolor="#FFFFFF", plot_bgcolor="#F8FAFC",
+            title={"text": "Embedding space · UMAP", "x": 0.02, "xanchor": "left"},
+            font={"family": "Inter, Arial, sans-serif", "color": "#344054"},
+            legend={"orientation": "h", "y": 1.05, "x": 1, "xanchor": "right"},
+            hoverlabel={"bgcolor": "#101828", "font": {"color": "white"}},
+        )
+
+        def padded_range(values: list[float]) -> list[float]:
+            low, high = min(values), max(values)
+            padding = max((high - low) * 0.45, 0.1)
+            return [low - padding, high + padding]
+
+        figure.update_xaxes(
+            title="UMAP 1",
+            range=padded_range([float(entry["x"]) for entry in entries]),
+            zeroline=True,
+            zerolinecolor="#D0D5DD",
+            gridcolor="#EAECF0",
+        )
+        figure.update_yaxes(
+            title="UMAP 2",
+            range=padded_range([float(entry["y"]) for entry in entries]),
+            zeroline=True,
+            zerolinecolor="#D0D5DD",
+            gridcolor="#EAECF0",
+        )
+        return figure
+
+    def compare_and_add(text_a: str, text_b: str, state: object) -> tuple[dict[str, Any], object, object]:
+        try:
+            outcome = comparison_cluster_runner(
+                text_a=text_a, text_b=text_b, state=state, settings=load_settings(), model=None
+            )
+            cluster = outcome["cluster"]
+            return outcome["comparison"], cluster, cluster_view(cluster)
         except Exception as error:
-            return {"error": f"{type(error).__name__}: {error}"}
+            return {"error": f"{type(error).__name__}: {error}"}, state, cluster_view(state)
 
     layout_css = """
     #embedding-comparison-row { flex-wrap: nowrap !important; gap: 16px !important; }
     #embedding-comparison-row > * { min-width: 0 !important; }
     """
     with gr.Blocks(css=layout_css, fill_width=True) as app:
-        gr.Markdown(
-            "# Embedding Similarity UI\n"
-            "두 텍스트를 임베딩해 cosine similarity를 비교합니다. 결과 조회만 수행하며 외부 업무 상태를 변경하지 않습니다."
-        )
         gr.Markdown(f"Embedding model: `{configured_model}` (`.env`의 `EMBED_MODEL`)")
         with gr.Row(equal_height=True, elem_id="embedding-comparison-row"):
             with gr.Column(scale=1, min_width=0):
@@ -150,48 +212,13 @@ def build_embedding_ui(embedding_runner: Callable[..., dict[str, Any]]):
                 run = gr.Button("Compare", variant="primary")
             with gr.Column(scale=1, min_width=0):
                 output = gr.JSON(label="Result", min_height=260)
-        run.click(compare, inputs=[first, second], outputs=output)
-    return app
-
-
-def build_image_labeling_ui(image_labeler: Callable[..., dict[str, Any]]):
-    """Create a one-image, candidate-label classification view."""
-    gr = _gradio()
-    load_settings()
-    configured_model = os.getenv("EMBED_MODEL", "amazon--titan-embed-image")
-
-    def label(image: str | None, candidate_labels: str) -> dict[str, Any]:
-        labels = [
-            value.strip()
-            for value in candidate_labels.replace(",", "\n").splitlines()
-            if value.strip()
-        ]
-        if not image:
-            return {"error": "라벨링할 이미지 한 장을 선택하세요."}
-        if not labels:
-            return {"error": "후보 라벨을 하나 이상 입력하세요."}
-        try:
-            return image_labeler(
-                image_path=image, labels=labels, settings=load_settings(), model=None
-            )
-        except Exception as error:
-            return {"error": f"{type(error).__name__}: {error}"}
-
-    with gr.Blocks(fill_width=True) as app:
-        gr.Markdown(
-            "# Image Labeling UI\n"
-            "이미지 한 장을 후보 라벨의 텍스트 embedding과 비교해 가장 가까운 라벨을 반환합니다. 이미지 파일은 embedding 요청에만 사용하며 외부에 저장하지 않습니다."
+        cluster_state = gr.State(value=None)
+        cluster_plot = gr.Plot(label=None, show_label=False)
+        run.click(
+            compare_and_add,
+            inputs=[first, second, cluster_state],
+            outputs=[output, cluster_state, cluster_plot],
         )
-        gr.Markdown(f"Embedding model: `{configured_model}` (`.env`의 `EMBED_MODEL`)")
-        image = gr.Image(label="Image", type="filepath")
-        candidate_labels = gr.Textbox(
-            label="Candidate labels (comma or newline separated)",
-            value="food, document, person, landscape",
-            lines=3,
-        )
-        run = gr.Button("Label image", variant="primary")
-        output = gr.JSON(label="Result")
-        run.click(label, inputs=[image, candidate_labels], outputs=output)
     return app
 
 
@@ -383,14 +410,14 @@ def build_business_embedding_ui(
 
 def build_decision_reranker_ui(
     decision_runner: Callable[..., dict[str, Any]],
-    default_policy_document: str,
     candidates: list[dict[str, str]],
-    default_min_margin: float = 0.12,
-    default_min_score: float = 0.45,
+    default_min_margin: float = 0.0,
+    default_min_score: float = 0.0,
 ):
     """Create a read-only decision view backed by one public core API."""
     gr = _gradio()
-    default_behavior = "인증된 고객이 주문 간격 60초 이상을 지키며 1분에 1회 주문을 시도했다. 중복, 실패, 한도 초과는 없다."
+    default_behavior = ORDER_RISK_DEMO_CASES[0]["case"]
+    example_scenarios = [(case["name"], case["case"]) for case in ORDER_RISK_DEMO_CASES]
     candidate_summary = "\n".join(
         f"- **{candidate['label']}** — {candidate['description']}"
         for candidate in candidates
@@ -401,27 +428,121 @@ def build_decision_reranker_ui(
       max-width: 620px !important; padding: 20px !important; border: 1px solid #d0d7de !important;
       border-radius: 14px !important; background: white !important; box-shadow: 0 18px 60px rgba(0,0,0,.22) !important;
     }
-    #decision-main-row { flex-wrap: nowrap !important; gap: 16px !important; }
+    #decision-main-row { flex-wrap: nowrap !important; gap: 20px !important; align-items: stretch !important; }
     #decision-main-row > * { min-width: 0 !important; }
+    .decision-panel { padding: 18px !important; border: 1px solid #d9e2f0 !important; border-radius: 14px !important; background: #fff !important; }
+    #decision-example-card { margin-top: 14px !important; border: 1px solid #d9e2f0 !important; border-radius: 12px !important; background: #f8fbff !important; }
+    #decision-example-card > .label-wrap { font-weight: 700 !important; }
+    .decision-example-button { min-height: 42px !important; text-align: left !important; }
+    .decision-result-empty, .decision-result { border: 1px solid #d9e2f0; border-radius: 14px; padding: 18px; background: #fff; }
+    .decision-result-empty { color: #5f6368; background: #f8fbff; }
+    .decision-result.review { border-left: 5px solid #f9ab00; }
+    .decision-result.approve { border-left: 5px solid #1e8e3e; }
+    .decision-result.decline { border-left: 5px solid #d93025; }
+    .decision-result.error { border-left: 5px solid #d93025; background: #fff8f7; }
+    .decision-result-header { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+    .decision-result-kicker { margin: 0; font-size: .78rem; font-weight: 700; color: #5f6368; letter-spacing: .04em; }
+    .decision-result-title { margin: 4px 0 0; font-size: 1.45rem; color: #202124; }
+    .decision-badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; white-space: nowrap; }
+    .decision-badge.review { background: #fef7e0; color: #8a5300; }
+    .decision-badge.approve { background: #e6f4ea; color: #137333; }
+    .decision-badge.decline { background: #fce8e6; color: #b3261e; }
+    .decision-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+    .decision-metric { padding: 12px; border-radius: 10px; background: #f8f9fa; }
+    .decision-metric span { display: block; font-size: .78rem; color: #5f6368; }
+    .decision-metric strong { display: block; margin-top: 4px; font-size: 1.25rem; color: #202124; }
+    .decision-evidence { margin-top: 14px; padding-top: 14px; border-top: 1px solid #edf0f2; }
+    .decision-evidence h4 { margin: 0 0 5px; font-size: .88rem; color: #3c4043; }
+    .decision-evidence p { margin: 0; color: #5f6368; line-height: 1.55; }
+    .decision-rankings { margin-top: 14px; }
+    .decision-rankings h3 { margin: 0 0 10px; font-size: 1rem; color: #202124; }
+    .decision-rank-row { display: grid; grid-template-columns: 28px minmax(90px, 1fr) minmax(100px, 2fr) 50px; align-items: center; gap: 8px; margin: 9px 0; }
+    .decision-rank-label { color: #3c4043; font-size: .9rem; }
+    .decision-progress { overflow: hidden; height: 9px; border-radius: 999px; background: #e8eaed; }
+    .decision-progress > span { display: block; height: 100%; border-radius: inherit; background: #1a73e8; }
+    .decision-rank-score { text-align: right; font-variant-numeric: tabular-nums; color: #3c4043; }
+    @media (max-width: 760px) {
+      #decision-main-row { flex-wrap: wrap !important; }
+      .decision-metrics { grid-template-columns: 1fr; }
+      .decision-rank-row { grid-template-columns: 24px minmax(75px, 1fr) minmax(72px, 1fr) 44px; gap: 5px; }
+    }
     """
 
-    def decide(
-        customer_behavior: str, policy_document: str, min_margin: float, min_score: float,
-    ) -> dict[str, Any]:
+    def decide(customer_behavior: str, min_margin: float, min_score: float) -> dict[str, Any]:
         if not customer_behavior.strip():
             return {"error": "고객 행동을 입력하세요."}
-        if not policy_document.strip():
-            return {"error": "정책 document를 입력하세요."}
         try:
             return decision_runner(
                 case_text=customer_behavior,
                 settings=load_settings(),
-                policy_document=policy_document,
                 min_margin=float(min_margin),
                 min_score=float(min_score),
             )
         except Exception as error:
             return {"error": f"{type(error).__name__}: {error}"}
+
+    def render_outcome(outcome: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+        if "error" in outcome:
+            message = escape(str(outcome["error"]))
+            return (
+                f'<section class="decision-result error"><p class="decision-result-kicker">호출 실패</p><h2 class="decision-result-title">추천을 생성하지 못했습니다</h2><p>{message}</p></section>',
+                "",
+                outcome,
+            )
+
+        ranked = list(outcome.get("ranked_candidates", []))
+        top = ranked[0] if ranked else {}
+        recommendation = str(outcome.get("recommendation", ""))
+        requires_review = bool(outcome.get("requires_human_review"))
+        theme = "review" if requires_review else recommendation
+        if theme not in {"approve", "decline", "review"}:
+            theme = "review"
+        recommendation_label = escape(str(outcome.get("recommendation_label", recommendation)))
+        review_label = "사람 검토 필요" if requires_review else "자동 추천 가능"
+        try:
+            top_score = float(top.get("score", 0))
+            margin = float(outcome.get("margin", 0))
+        except (TypeError, ValueError):
+            top_score, margin = 0.0, 0.0
+        summary = escape(str(outcome.get("policy_summary", "정책 요약이 없습니다."))).replace("\n", "<br>")
+        reason = escape(str(outcome.get("reason", "판단 근거가 없습니다."))).replace("\n", "<br>")
+        result_html = f"""
+        <section class="decision-result {theme}">
+          <div class="decision-result-header">
+            <div><p class="decision-result-kicker">추천 결과</p><h2 class="decision-result-title">{recommendation_label}</h2></div>
+            <span class="decision-badge {theme}">{review_label}</span>
+          </div>
+          <div class="decision-metrics">
+            <div class="decision-metric"><span>최고 관련도 점수</span><strong>{top_score:.3f}</strong></div>
+            <div class="decision-metric"><span>1·2위 점수 차이 (margin)</span><strong>{margin:.3f}</strong></div>
+          </div>
+          <div class="decision-evidence"><h4>Reranker 입력</h4><p>{summary}</p></div>
+          <div class="decision-evidence"><h4>검토 근거</h4><p>{reason}</p></div>
+        </section>
+        """
+        ranking_rows = []
+        for item in ranked:
+            try:
+                score = float(item.get("score", 0))
+            except (TypeError, ValueError):
+                score = 0.0
+            width = min(100, max(0, score * 100))
+            rank = escape(str(item.get("rank", "-")))
+            label = escape(str(item.get("label", item.get("id", "후보"))))
+            ranking_rows.append(
+                f'<div class="decision-rank-row"><span>{rank}</span><span class="decision-rank-label">{label}</span><span class="decision-progress"><span style="width: {width:.1f}%"></span></span><strong class="decision-rank-score">{score:.3f}</strong></div>'
+            )
+        ranking_html = (
+            '<section class="decision-rankings"><h3>후보별 관련도</h3>'
+            + "".join(ranking_rows)
+            + "</section>"
+        )
+        return result_html, ranking_html, outcome
+
+    def decide_and_render(
+        customer_behavior: str, min_margin: float, min_score: float,
+    ) -> tuple[str, str, dict[str, Any]]:
+        return render_outcome(decide(customer_behavior, min_margin, min_score))
 
     with gr.Blocks(css=modal_css, fill_width=True) as app:
         with gr.Row(equal_height=True):
@@ -433,26 +554,49 @@ def build_decision_reranker_ui(
             with gr.Column(scale=1, min_width=90):
                 open_settings = gr.Button("⚙️ 설정", size="sm")
         with gr.Row(equal_height=False, elem_id="decision-main-row"):
-            with gr.Column(scale=1, min_width=0):
-                customer_behavior = gr.Textbox(label="고객 행동", value=default_behavior, lines=5)
+            with gr.Column(scale=5, min_width=320, elem_classes=["decision-panel"]):
+                gr.Markdown("### ① 고객 행동\n주문 흐름과 인증·결제·한도 관련 사실을 입력하세요.")
+                customer_behavior = gr.Textbox(
+                    label="고객 행동",
+                    value=default_behavior,
+                    lines=7,
+                    placeholder="예: 1분 동안 3회 주문을 시도했고, 인증 실패는 없었습니다.",
+                )
                 run = gr.Button("추천 생성", variant="primary")
-                gr.Markdown("### 정책 후보\n" + candidate_summary)
-            with gr.Column(scale=1, min_width=0):
-                output = gr.JSON(label="추천 결과", min_height=360)
+                with gr.Accordion(f"예시 시나리오 ({len(example_scenarios)}개)", open=False, elem_id="decision-example-card"):
+                    gr.Markdown("예시를 선택하면 고객 행동 입력란에 적용됩니다.")
+                    for row_start in range(0, len(example_scenarios), 2):
+                        with gr.Row():
+                            for label, scenario in example_scenarios[row_start:row_start + 2]:
+                                example = gr.Button(
+                                    label,
+                                    variant="secondary",
+                                    size="sm",
+                                    elem_classes=["decision-example-button"],
+                                )
+                                example.click(
+                                    lambda value=scenario: value,
+                                    outputs=customer_behavior,
+                                )
+                with gr.Accordion("정책 후보 보기", open=False):
+                    gr.Markdown(candidate_summary)
+            with gr.Column(scale=7, min_width=380, elem_classes=["decision-panel"]):
+                gr.Markdown("### ② 추천 결과")
+                result_overview = gr.HTML(
+                    value='<section class="decision-result-empty">추천을 생성하면 핵심 결과, 점수, 정책 근거를 이곳에 표시합니다.</section>'
+                )
+                ranking_overview = gr.HTML(value="")
+                with gr.Accordion("상세 응답 (JSON)", open=False):
+                    output = gr.JSON(label="원본 응답", min_height=220)
         with gr.Column(visible=False, elem_id="decision-settings-modal") as settings_modal:
             gr.Markdown("### Reranker 설정")
-            policy_document = gr.Textbox(
-                label="정책 문서",
-                value=default_policy_document,
-                lines=11,
-            )
             gr.Markdown("### 사람 검토 게이트")
             with gr.Row():
                 min_margin = gr.Slider(
                     minimum=0,
                     maximum=1,
                     value=default_min_margin,
-                    step=0.01,
+                    step=0.005,
                     label="최소 margin",
                     info="1·2위 score 차이가 이 값보다 작으면 manual-review입니다.",
                 )
@@ -468,8 +612,8 @@ def build_decision_reranker_ui(
         open_settings.click(lambda: gr.update(visible=True), outputs=settings_modal)
         close_settings.click(lambda: gr.update(visible=False), outputs=settings_modal)
         run.click(
-            decide,
-            inputs=[customer_behavior, policy_document, min_margin, min_score],
-            outputs=output,
+            decide_and_render,
+            inputs=[customer_behavior, min_margin, min_score],
+            outputs=[result_overview, ranking_overview, output],
         )
     return app

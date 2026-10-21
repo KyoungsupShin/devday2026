@@ -5,7 +5,9 @@ from __future__ import annotations
 import html
 import json
 import os
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import gradio as gr
 from lab_common.config import Settings, load_settings
@@ -18,9 +20,15 @@ from .catalog import (
     SUBAGENT_BY_LABEL,
 )
 from .harness import (
+    COMPONENT_LABELS,
+    active_runtime_overlays_for_request,
+    analyse_trace,
+    apply_human_selection,
     adopt_variant,
     evaluate_comparison,
+    load_revision_library,
     record_live_verification,
+    rollback_active_revision,
     rollback_adoption,
     run_harness_experiment,
 )
@@ -28,6 +36,18 @@ from .history import persist_a2a_conversation, persist_human_approval_action
 from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
 from .tools import schemas_for_tool_ids
+
+_AVATAR_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets" / "brand"
+
+
+def _brand_avatar_html(filename: str, label: str, icon: str) -> str:
+    """Return a locally served, user-supplied brand image for a chat avatar."""
+    asset_path = quote((_AVATAR_ASSET_DIR / filename).as_posix(), safe="/")
+    return (
+        '<img class="a2a-group-chat__brand-avatar" '
+        f'src="/gradio_api/file={asset_path}" alt="{label}" '
+        f'data-avatar-icon="{icon}">'
+    )
 
 ADVANCED_A2A_WORKFLOW_GRAPH_SVG = """
 <svg viewBox="0 0 1800 455" width="100%" role="img" aria-label="Advanced LLM-orchestrated A2A workflow with Codex App Server" xmlns="http://www.w3.org/2000/svg">
@@ -39,7 +59,7 @@ ADVANCED_A2A_WORKFLOW_GRAPH_SVG = """
   <rect x="260" y="38" width="225" height="76" rx="12" class="work"/><text x="372" y="68" text-anchor="middle" class="label">ReAct Observation</text><text x="372" y="90" text-anchor="middle" class="small">artifacts · open decisions</text>
   <rect x="265" y="165" width="230" height="104" rx="12" class="work"/><text x="380" y="199" text-anchor="middle" class="label">Orchestration Agent</text><text x="380" y="222" text-anchor="middle" class="small">LLM decide: Team / Codex</text><text x="380" y="244" text-anchor="middle" class="small">/ complete</text>
   <rect x="570" y="52" width="210" height="76" rx="12" class="work"/><text x="675" y="82" text-anchor="middle" class="label">Grounding &amp; Approval</text><text x="675" y="104" text-anchor="middle" class="small">LLM Tool Calling</text>
-  <rect x="835" y="52" width="230" height="76" rx="12" class="harness"/><text x="950" y="82" text-anchor="middle" class="label">Harness² Experiment</text><text x="950" y="104" text-anchor="middle" class="small">compare · human adopt / rollback</text>
+  <rect x="835" y="52" width="230" height="76" rx="12" class="harness"/><text x="950" y="82" text-anchor="middle" class="label">Harness Labs</text><text x="950" y="104" text-anchor="middle" class="small">trace review · human apply</text>
   <rect x="570" y="180" width="180" height="76" rx="12" class="work"/><text x="660" y="210" text-anchor="middle" class="label">A2A Handoff</text><text x="660" y="232" text-anchor="middle" class="small">Message + envelope</text>
   <rect x="825" y="155" width="225" height="126" rx="12" class="node"/><text x="937" y="188" text-anchor="middle" class="label">Selected A2A Agent</text><text x="937" y="211" text-anchor="middle" class="small">Team Agent or Codex Agent</text><text x="937" y="234" text-anchor="middle" class="small">A2A Task status updates</text><text x="937" y="257" text-anchor="middle" class="small">artifact production</text>
   <rect x="1115" y="315" width="205" height="76" rx="12" class="codex"/><text x="1217" y="345" text-anchor="middle" class="label">Codex App Server</text><text x="1217" y="367" text-anchor="middle" class="small">read-only SQL draft</text>
@@ -49,7 +69,7 @@ ADVANCED_A2A_WORKFLOW_GRAPH_SVG = """
 
   <path d="M180 218 H265" class="edge"/><text x="222" y="204" text-anchor="middle" class="small">Field Agent handoff</text><path d="M372 114 V165" class="edge"/><path d="M495 218 H570" class="edge"/><path d="M750 218 H825" class="edge"/><path d="M1050 218 H1125" class="edge"/><path d="M1315 218 H1390" class="edge"/><path d="M1595 218 H1665" class="edge"/>
   <path d="M495 190 C525 190 530 90 570 90" class="edge"/><text x="526" y="122" class="small">tool call</text><path d="M675 128 C675 148 570 148 495 185" class="edge"/><text x="575" y="151" class="small">evidence</text>
-  <path d="M950 128 C950 150 650 145 495 175" class="harness-edge"/><text x="755" y="140" text-anchor="middle" class="small" style="fill:#7b1fa2">session-only addendum</text>
+  <path d="M950 128 C950 150 650 145 495 175" class="harness-edge"/><text x="755" y="140" text-anchor="middle" class="small" style="fill:#7b1fa2">approved revision overlay</text>
   <path d="M937 281 C937 330 1060 352 1115 352" class="edge"/><text x="1022" y="330" class="small">when Codex selected</text><path d="M1217 315 V256" class="edge"/><text x="1243" y="292" class="small">SQL artifact</text>
   <path d="M1492 269 C1492 425 380 425 380 269" class="edge"/><text x="935" y="422" text-anchor="middle" class="small">artifact event → observe → next ReAct decision</text>
 </svg>
@@ -87,6 +107,18 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       if (event.target === modal) modal.close();
     });
   }
+  const toolbar = document.getElementById("a2a-page-toolbar");
+  if (toolbar && !toolbar.dataset.toolbarBound) {
+    toolbar.dataset.toolbarBound = "true";
+    toolbar.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-a2a-chat-toolbar-action]");
+      if (!action || !toolbar.contains(action)) return;
+      const selector = action.dataset.a2aChatToolbarAction === "reset"
+        ? "#a2a-chat-reset-action button, button#a2a-chat-reset-action"
+        : "#a2a-chat-pause-action button, button#a2a-chat-pause-action";
+      document.querySelector(selector)?.click();
+    });
+  }
   harnessRoots.forEach((harnessRoot) => {
     const harnessScope = harnessRoot.closest(".gradio-container") || document;
     const harnessSidebar = harnessScope.querySelector("#a2a-harness-sidebar");
@@ -96,7 +128,7 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       const collapsed = harnessSidebar?.classList.contains("is-collapsed") || false;
       harnessRoot.querySelectorAll("[data-a2a-harness-sidebar-toggle]").forEach((button) => {
         button.setAttribute("aria-expanded", String(!collapsed));
-        button.setAttribute("aria-label", collapsed ? "Harness² 실험방 펼치기" : "Harness² 실험방 접기");
+        button.setAttribute("aria-label", collapsed ? "Harness Labs 펼치기" : "Harness Labs 접기");
       });
     };
     const invokeHarnessAction = (selector) => {
@@ -111,9 +143,20 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     };
+    const syncHarnessComment = (comment) => {
+      const input = harnessScope.querySelector(
+        "#a2a-harness-comment textarea, #a2a-harness-comment input"
+      );
+      if (!input || !comment) return;
+      input.value = comment.value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
     harnessRoot.addEventListener("change", (event) => {
       const choice = event.target.closest("[data-a2a-harness-choice]");
       if (choice && harnessRoot.contains(choice)) syncHarnessChoice(choice);
+      const comment = event.target.closest("[data-a2a-harness-comment]");
+      if (comment && harnessRoot.contains(comment)) syncHarnessComment(comment);
     });
     harnessRoot.addEventListener("click", (event) => {
       const sidebarToggle = event.target.closest("[data-a2a-harness-sidebar-toggle]");
@@ -128,23 +171,29 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       event.preventDefault();
       if (action.dataset.a2aActionPending === "true") return;
       const kind = action.dataset.a2aHarnessAction;
-      if (kind === "adopt") {
+      if (kind === "adopt" || kind === "apply") {
         const choice = harnessRoot.querySelector("[data-a2a-harness-choice]");
         if (!choice?.value) {
           choice?.focus();
           return;
         }
         syncHarnessChoice(choice);
+        syncHarnessComment(harnessRoot.querySelector("[data-a2a-harness-comment]"));
       }
       action.dataset.a2aActionPending = "true";
       action.disabled = true;
-      action.textContent = kind === "run"
-        ? "비교 실행 중…"
+      action.textContent = kind === "analyse" ? "로그 분석 중…"
+        : kind === "run" ? "비교 실행 중…"
+        : kind === "apply" ? "의견 반영 중…"
         : kind === "adopt" ? "세션에 채택 중…" : "기본 흐름으로 롤백 중…";
       invokeHarnessAction(
-        kind === "run"
+        kind === "analyse"
+          ? "#a2a-harness-analyse button, button#a2a-harness-analyse"
+          : kind === "run"
           ? "#a2a-harness-run button, button#a2a-harness-run"
-          : kind === "adopt"
+          : kind === "apply"
+            ? "#a2a-harness-apply button, button#a2a-harness-apply"
+            : kind === "adopt"
             ? "#a2a-harness-adopt button, button#a2a-harness-adopt"
             : "#a2a-harness-rollback button, button#a2a-harness-rollback"
       );
@@ -1201,7 +1250,28 @@ def _subagent_review_body_html(message: dict[str, Any]) -> str | None:
 
 def _message_body_html(message: dict[str, Any]) -> str:
     """Render structured message sections without dropping any text."""
+    harness_html = message.get("harness_html")
+    if isinstance(harness_html, str):
+        return harness_html
     harness_action = message.get("harness_action")
+    if harness_action == "analyse":
+        return (
+            '<div class="a2a-harness-action">'
+            '<span>완료된 실행 로그를 분석해 개선안을 만듭니다. A2A를 다시 실행하지 않습니다.</span>'
+            '<button type="button" data-a2a-harness-action="analyse">실행 로그로 개선안 만들기</button></div>'
+        )
+    if harness_action == "apply":
+        choices = message.get("choices") if isinstance(message.get("choices"), list) else []
+        option_html = "".join(
+            f'<option value="{html.escape(choice[0], quote=True)}">{html.escape(choice[0].replace("option_", ""))}. {html.escape(choice[1])}{" · AI 추천" if choice[2] else ""}</option>'
+            for choice in choices if isinstance(choice, tuple) and len(choice) == 3
+        )
+        return (
+            '<div class="a2a-harness-action"><span>개선 방향 선택</span>'
+            f'<select data-a2a-harness-choice aria-label="Harness 개선 방향">{option_html}</select>'
+            '<textarea data-a2a-harness-comment rows="2" placeholder="Comment (선택)"></textarea>'
+            '<button type="button" data-a2a-harness-action="apply">선택·의견 반영</button></div>'
+        )
     if harness_action == "run":
         return (
             '<div class="a2a-harness-action">'
@@ -1225,9 +1295,9 @@ def _message_body_html(message: dict[str, Any]) -> str:
         )
     if harness_action == "rollback":
         return (
-            '<div class="a2a-harness-action">'
-            '<span>적용 후 결과가 기준 실행보다 낮거나 기대와 다르면 즉시 기본 흐름으로 되돌릴 수 있습니다.</span>'
-            '<button type="button" data-a2a-harness-action="rollback">세션 적용 롤백</button>'
+            '<div class="a2a-harness-action a2a-harness-action--rollback">'
+            '<span>기대와 다를 때만 기본 흐름으로 되돌립니다.</span>'
+            '<button type="button" data-a2a-harness-action="rollback">롤백</button>'
             "</div>"
         )
     if message.get("human_approval_fallback") is True:
@@ -1337,17 +1407,9 @@ _MESSAGE_AVATAR_ICONS = {
         '<path d="M4 21V5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5V21M2 21h20M8 7h1M12 7h1M8 11h1M12 11h1M9 21v-5h2v5"/>'
         "</svg>"
     ),
-    "orchestrator": (
-        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-        '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>'
-        '<circle cx="12" cy="18" r="2"/><path d="m7.7 7.2 3.1 8.1M16.3 7.2l-3.1 8.1M8 6h8"/>'
-        "</svg>"
-    ),
-    "agent": (
-        '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
-        '<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 13h.01M16 13h.01M9 16h6"/>'
-        "</svg>"
-    ),
+    "orchestrator": _brand_avatar_html("sap_logo.png", "SAP", "sap"),
+    "codex": _brand_avatar_html("openai.jpeg", "OpenAI", "codex"),
+    "agent": _brand_avatar_html("joule.png", "Joule", "joule"),
     "human": (
         '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
         '<circle cx="12" cy="8" r="3"/><path d="M5 21a7 7 0 0 1 14 0M17 5l1.3 1.3L21 3.7"/>'
@@ -1369,6 +1431,8 @@ def _message_avatar_html(sender: str, kind: str) -> str:
         icon = "department"
     elif "orchestration" in normalized or kind == "orchestrator":
         icon = "orchestrator"
+    elif "codex" in normalized:
+        icon = "codex"
     elif "harness" in normalized:
         icon = "harness"
     elif "outlook" in normalized or "mail" in normalized:
@@ -1402,7 +1466,7 @@ def _group_chat_html(
     toggle = (
         '<button type="button" class="a2a-group-chat__sidebar-toggle" '
         'data-a2a-harness-sidebar-toggle aria-expanded="true" '
-        'aria-label="Harness² 실험방 접기">'
+        'aria-label="Harness Labs 접기">'
         '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
         '<path d="m14 6-6 6 6 6"/>'
         "</svg></button>"
@@ -1537,7 +1601,7 @@ def _harness_chat_html(
 ) -> str:
     return _group_chat_html(
         _harness_messages(experiment, adoption, baseline_ready=baseline_ready),
-        room_title="Harness² 실험방",
+        room_title="Harness Labs",
         room_subtitle="런타임 오케스트레이션 비교",
         avatar_icon="harness",
         status="세션 전용",
@@ -1608,6 +1672,102 @@ def _harness_dashboard_html(experiment: dict[str, Any] | None = None) -> str:
     )
 
 
+def _trace_option_html(option: dict[str, Any]) -> str:
+    """Render one human-reviewable Harness proposal without exposing unsafe HTML."""
+    badge = '<span class="a2a-harness-recommendation">AI 추천</span>' if option.get("recommended") else ""
+    evidence = "".join(f"<li>{html.escape(str(item))}</li>" for item in option.get("evidence", []))
+    changes = "".join(
+        "<li><b>" + html.escape(COMPONENT_LABELS.get(str(change.get("component")), "Runtime"))
+        + "</b> · " + html.escape(str(change.get("target", "runtime")))
+        + "<br>" + html.escape(str(change.get("instruction", ""))) + "</li>"
+        for change in option.get("changes", []) if isinstance(change, dict)
+    )
+    impact = option.get("impact") if isinstance(option.get("impact"), dict) else {}
+    benefit = html.escape(str(impact.get("expected_benefit") or "실행 로그에서 확인된 누락 또는 반복을 줄입니다."))
+    controls = html.escape(str(impact.get("mandatory_controls") or "기존 승인·읽기 전용·필수 검증을 유지합니다."))
+    build_required = bool(impact.get("build_required"))
+    build_badge = "Build 필요" if build_required else "런타임 반영 가능"
+    return (
+        '<section class="a2a-harness-option">'
+        f'<div><b>{html.escape(str(option.get("option_id", "-")))}. {html.escape(str(option.get("title", "개선안")))}</b>{badge}</div>'
+        f'<p>{html.escape(str(option.get("rationale", "")))}</p>'
+        '<div class="a2a-harness-option__meta">'
+        f'<span><b>효과</b> {benefit}</span>'
+        f'<span><b>유지 통제</b> {controls}</span>'
+        f'<em class="a2a-harness-option__build{" a2a-harness-option__build--required" if build_required else ""}">{build_badge}</em>'
+        '</div>'
+        f'<span>실행 근거</span><ul>{evidence}</ul>'
+        f'<span>변경 사항</span><ul>{changes}</ul>'
+        "</section>"
+    )
+
+
+def _trace_harness_chat_html(
+    analysis: dict[str, Any] | None = None, *, baseline_ready: bool = False
+) -> str:
+    messages: list[dict[str, Any]] = [{
+        "sender": "Harness Labs", "kind": "system",
+        "text": "실제 A2A 실행 로그를 분석해 개선안을 제안합니다. 별도 Probe 실행은 하지 않습니다.",
+    }]
+    if not isinstance(analysis, dict):
+        if baseline_ready:
+            messages.append({"sender": "Harness Labs", "kind": "system", "harness_action": "analyse"})
+    else:
+        decision = str(analysis.get("decision", ""))
+        labels = {"no_change": "변경 불필요", "insufficient_evidence": "근거 부족", "propose": "개선안 제안"}
+        messages.append(_sectioned_chat_message(
+            "Harness Labs", "agent",
+            ("분석 결과", labels.get(decision, "분석 완료")),
+            ("판단", analysis.get("rationale", "-")),
+            ("근거", analysis.get("evidence", [])), heading="실행 로그 분석",
+        ))
+        if decision == "propose":
+            options = [item for item in analysis.get("options", []) if isinstance(item, dict)]
+            for option in options:
+                messages.append({"sender": "Harness Labs", "kind": "agent", "harness_html": _trace_option_html(option)})
+            messages.append({
+                "sender": "Human Reviewer", "kind": "field", "harness_action": "apply",
+                "choices": [(str(item.get("option_id")), str(item.get("title")), bool(item.get("recommended"))) for item in options],
+            })
+        elif decision == "no_change":
+            messages.append({"sender": "Harness Labs", "kind": "system", "text": "현재 Harness를 유지합니다. Revision은 생성되지 않았습니다."})
+        else:
+            messages.append({"sender": "Harness Labs", "kind": "system", "text": "충분한 실행 근거가 없어 변경안을 만들지 않았습니다. 다음 실제 실행 후 다시 분석할 수 있습니다."})
+        revision = analysis.get("adoption")
+        if isinstance(revision, dict):
+            reflection = (
+                "Build artifact 생성·검토 필요 (원본 소스는 변경하지 않음)"
+                if revision.get("build_required")
+                else "런타임 overlay 반영 (원본 소스는 변경하지 않음)"
+            )
+            messages.append(_sectioned_chat_message(
+                "Human Reviewer", "field", ("활성 revision", revision.get("title", "-")),
+                ("Comment", revision.get("comment") or "없음"),
+                ("반영 상태", reflection),
+                ("도메인", revision.get("domain", "-")), heading="선택·의견 반영 완료",
+            ))
+            messages.append({"sender": "Harness Labs", "kind": "system", "harness_action": "rollback"})
+    return _group_chat_html(messages, room_title="Harness Labs", room_subtitle="실행 로그 기반 개선", avatar_icon="harness", status="사람 검토", extra_class="a2a-harness-chat", sidebar_toggle=True)
+
+
+def _trace_harness_dashboard_html(analysis: dict[str, Any] | None = None) -> str:
+    if not isinstance(analysis, dict):
+        return '<section class="a2a-harness-dashboard"><b>Harness Revision Library</b><p>A2A 실행을 완료하면 로그 기반 개선안을 만들 수 있습니다.</p></section>'
+    domain = html.escape(str(analysis.get("domain", "-")))
+    library = load_revision_library()
+    revisions = [item for item in library.get("revisions", []) if isinstance(item, dict) and item.get("domain") == analysis.get("domain")]
+    active_id = library.get("active_by_domain", {}).get(analysis.get("domain"))
+    history = "".join(
+        f'<li>{html.escape(str(item.get("title", "revision")))} · {html.escape(str(item.get("status", "-")))}</li>'
+        for item in revisions[-5:]
+    ) or "<li>저장된 revision이 없습니다.</li>"
+    return (
+        '<section class="a2a-harness-dashboard"><b>Harness Revision Library</b>'
+        f'<p>도메인: {domain} · 활성 revision: {html.escape(str(active_id or "없음"))}</p>'
+        f'<ul>{history}</ul></section>'
+    )
+
+
 def _artifact_chat_message(
     record: dict[str, Any], labels: dict[str, str]
 ) -> dict[str, Any]:
@@ -1654,7 +1814,28 @@ def _scenario_card_html(title: str, department: str, request: str) -> str:
     )
 
 
+def _conversation_history_for_handoff(
+    messages: list[dict[str, Any]] | None,
+) -> list[dict[str, str]]:
+    """Return semantic user/assistant turns, excluding internal A2A event bubbles."""
+    history: list[dict[str, str]] = []
+    for message in messages or []:
+        if not isinstance(message, dict) or message.get("kind") != "field":
+            continue
+        text = message.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        history.append(
+            {
+                "role": "assistant" if message.get("heading") else "user",
+                "content": text.strip(),
+            }
+        )
+    return history
+
+
 def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
+    gr.set_static_paths(_AVATAR_ASSET_DIR)
     settings = settings or load_settings()
     default_outlook_recipient = _default_outlook_recipient()
 
@@ -1665,12 +1846,14 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         previous_approvals: list[dict[str, Any]] | None = None,
         previous_outcome: dict[str, Any] | None = None,
         active_harness: str | None = None,
+        active_grounding: str | None = None,
         experiment: dict[str, Any] | None = None,
     ):
         clean_request = request.strip() if isinstance(request, str) else ""
         if not clean_request:
             raise gr.Error("요청을 입력하세요.")
         requester_label = _requester_label(request_department)
+        conversation_history = _conversation_history_for_handoff(previous_messages)
         labels = {agent["agent_id"]: agent["agent_label"] for agent in list_agents()}
         event_log, middleware = [], []
         chat_messages = list(previous_messages or [])
@@ -1680,27 +1863,30 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         pending_approvals = [
             draft for draft in (previous_approvals or []) if isinstance(draft, dict)
         ]
+        if active_harness:
+            runtime_harness, runtime_grounding = active_harness, active_grounding or ""
+        else:
+            runtime_harness, runtime_grounding = active_runtime_overlays_for_request(
+                clean_request, settings=settings
+            )
 
         def workflow_output(outcome: dict[str, Any] | None = None):
             active_experiment = experiment if isinstance(experiment, dict) else None
-            if outcome is not None and active_harness and active_experiment is not None:
+            if (
+                outcome is not None and (runtime_harness or runtime_grounding) and active_experiment is not None
+                and isinstance(active_experiment.get("trials"), dict)
+            ):
                 record_live_verification(active_experiment, outcome, clean_request)
-            adoption = (
-                active_experiment.get("adoption")
-                if isinstance(active_experiment, dict)
-                else None
-            )
             return (
                 _chat_payload_html(chat_messages, sorted(typing_agents)),
                 chat_messages,
                 pending_approvals,
                 outcome if outcome is not None else previous_outcome,
-                _harness_chat_html(
+                _trace_harness_chat_html(
                     active_experiment,
-                    adoption if isinstance(adoption, dict) else None,
                     baseline_ready=outcome is not None or previous_outcome is not None,
                 ),
-                _harness_dashboard_html(active_experiment),
+                _trace_harness_dashboard_html(active_experiment),
                 active_experiment,
             )
 
@@ -1708,7 +1894,9 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             for event in run_handoff_stream(
                 clean_request,
                 settings=settings,
-                harness_addendum=active_harness or None,
+                harness_addendum=runtime_harness or None,
+                grounding_overlay=runtime_grounding or None,
+                conversation_history=conversation_history,
             ):
                 kind = event["type"]
                 if kind == "field_handoff_received":
@@ -1906,6 +2094,24 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             normalized,
         )
 
+    def reset_chat():
+        """Clear this session's A2A chat, approval, and Harness² state."""
+        return (
+            _chat_payload_html([]),
+            [],
+            [],
+            None,
+            _trace_harness_chat_html(),
+            _trace_harness_dashboard_html(),
+            None,
+            "",
+            "",
+        )
+
+    def pause_chat():
+        """Cancel the active streamed handoff while keeping messages on screen."""
+        return None
+
     def send_approved_email(
         drafts: list[dict[str, Any]] | None,
         messages: list[dict[str, Any]] | None,
@@ -2030,45 +2236,59 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         return approval_output(normalized, updated_messages)
 
     def run_harness_panel(
-        request: str | None, baseline_result: dict[str, Any] | None
+        request: str | None,
+        baseline_result: dict[str, Any] | None,
+        chat_log: list[dict[str, Any]] | None = None,
     ):
-        """Run the separate learning loop from the last completed A2A result."""
+        """Analyse a completed trace only; never run an additional A2A probe."""
         clean_request = request.strip() if isinstance(request, str) else ""
         if not clean_request or not isinstance(baseline_result, dict):
             raise gr.Error("먼저 왼쪽 협업방에서 기준 A2A 실행을 완료하세요.")
-        experiment = run_harness_experiment(
-            clean_request, baseline_result=baseline_result, settings=settings
+        experiment = analyse_trace(
+            clean_request, baseline_result, settings=settings, chat_log=chat_log
         )
         return (
-            _harness_chat_html(experiment),
+            _trace_harness_chat_html(experiment),
             experiment,
             "",
-            _harness_dashboard_html(experiment),
+            _trace_harness_dashboard_html(experiment),
+            "",
             "",
         )
 
     def adopt_harness_panel(
-        experiment: dict[str, Any] | None, candidate_id: str | None
+        experiment: dict[str, Any] | None, candidate_id: str | None, comment: str | None
     ):
         if not isinstance(experiment, dict) or not isinstance(candidate_id, str):
-            raise gr.Error("오른쪽 비교 결과에서 성공한 후보를 선택하세요.")
-        adoption = adopt_variant(experiment, candidate_id)
+            raise gr.Error("개선 방향을 선택하세요.")
+        try:
+            adoption = apply_human_selection(experiment, candidate_id, comment or "")
+        except ValueError as error:
+            raise gr.Error(str(error)) from error
+        experiment["adoption"] = adoption
         return (
-            _harness_chat_html(experiment, adoption),
+            _trace_harness_chat_html(experiment),
             experiment,
-            adoption["active_harness"],
-            _harness_dashboard_html(experiment),
+            adoption["overlay"],
+            adoption["grounding_overlay"],
+            _trace_harness_dashboard_html(experiment),
         )
 
     def rollback_harness_panel(experiment: dict[str, Any] | None):
         if not isinstance(experiment, dict):
-            raise gr.Error("롤백할 Harness² 세션이 없습니다.")
-        rollback_adoption(experiment)
+            raise gr.Error("롤백할 Harness revision이 없습니다.")
+        try:
+            rollback_active_revision(str(experiment.get("domain") or "fnb-general"))
+        except ValueError as error:
+            raise gr.Error(str(error)) from error
+        experiment.pop("adoption", None)
+        experiment["rollback"] = True
         return (
-            _harness_chat_html(experiment),
+            _trace_harness_chat_html(experiment),
             experiment,
             "",
-            _harness_dashboard_html(experiment),
+            "",
+            _trace_harness_dashboard_html(experiment),
         )
 
     css = """
@@ -2078,14 +2298,14 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     .a2a-chat-payload{display:none!important}.a2a-chat-shell{border-color:#c4d0dc;background:#edf2f6}.a2a-chat-composer{background:#f7f9fb!important;border-top-color:#c4d0dc!important}.a2a-group-chat{border-color:#c4d0dc;background:#edf2f6}.a2a-group-chat__header{background:#5d7489}.a2a-group-chat__messages{box-sizing:border-box;width:100%;max-width:980px;margin:0 auto;padding:16px 18px}.a2a-group-chat__row{margin-bottom:16px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 42px))}.a2a-group-chat__avatar{box-shadow:0 1px 2px rgba(40,58,74,.15)}.a2a-group-chat__sender{margin-bottom:5px;font-size:12px}.a2a-group-chat__bubble{box-sizing:border-box;max-width:100%;padding:12px;border:1px solid #d7e0e8;border-radius:4px 13px 13px 13px;color:#25313d;line-height:1.55;box-shadow:0 1px 2px rgba(40,58,74,.08)}.a2a-group-chat__title{margin:0 0 9px;color:#41576b;font-size:11px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__section{margin:8px 0 0;padding:8px 9px;border-radius:8px;background:#f5f8fb}.a2a-group-chat__section:first-of-type{margin-top:0}.a2a-group-chat__section-label{margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__section-body p{margin:0}.a2a-group-chat__section-body ul{margin:0;padding-left:17px}.a2a-group-chat__section-body li+li{margin-top:3px}.a2a-group-chat__subagent-card{padding:10px;border:1px solid #d8e3eb;border-radius:9px;background:#f7fafc}.a2a-group-chat__subagent-result>span,.a2a-group-chat__subagent-next>span,.a2a-group-chat__subagent-meta-label{display:block;margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__subagent-result p,.a2a-group-chat__subagent-next p{margin:0}.a2a-group-chat__subagent-result ul,.a2a-group-chat__subagent-next ul{margin:0;padding-left:17px}.a2a-group-chat__subagent-next{margin-top:9px;padding-top:9px;border-top:1px solid #e0e8ef}.a2a-group-chat__subagent-meta{display:flex;flex-wrap:wrap;gap:7px 10px;align-items:center;margin-top:10px;padding-top:9px;border-top:1px solid #e0e8ef}.a2a-group-chat__subagent-tools{display:flex;flex-wrap:wrap;gap:5px;align-items:center}.a2a-group-chat__subagent-tools .a2a-group-chat__subagent-meta-label{margin:0}.a2a-group-chat__tool-chips{display:flex;flex-wrap:wrap;gap:4px}.a2a-group-chat__tool-chip{padding:2px 6px;border:1px solid #cbdce9;border-radius:999px;background:#fff;color:#46657d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;line-height:1.35;overflow-wrap:anywhere}.a2a-group-chat__evidence-tooltip{position:relative;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid #cbdce9;border-radius:999px;background:#fff;color:#46657d;font-size:10px;font-weight:800;line-height:1.35;cursor:help;outline:none}.a2a-group-chat__evidence-tooltip:focus-visible{box-shadow:0 0 0 2px #8db5d8}.a2a-group-chat__evidence-tooltip::after{position:absolute;z-index:4;bottom:calc(100% + 7px);left:0;display:block;width:max-content;max-width:min(360px,calc(100vw - 84px));padding:8px 9px;border-radius:8px;background:#314b64;color:#fff;content:attr(data-tooltip);font-size:11px;font-weight:400;line-height:1.45;white-space:pre-wrap;visibility:hidden;opacity:0;pointer-events:none;box-shadow:0 4px 14px rgba(40,58,74,.22);transition:opacity .12s ease}.a2a-group-chat__evidence-tooltip:hover::after,.a2a-group-chat__evidence-tooltip:focus::after{visibility:visible;opacity:1}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{background:#f4df72;color:#604f00}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-color:#e8d277;background:#fff8d8}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:rgba(255,255,255,.6)}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-color:#c6dff5;background:#f7fbff}.a2a-group-chat__system{background:#6f8395}#a2a-scenario-card-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px!important;align-items:stretch}#a2a-scenario-card-grid>.gr-column{min-width:0!important;flex:initial!important}.a2a-scenario-card{gap:0!important;min-width:0!important;border:1px solid #c9d9e7;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(40,58,74,.08);overflow:hidden}.a2a-scenario-card__body{height:100%;min-height:214px;padding:15px 15px 11px;background:linear-gradient(145deg,#f9fcff,#eef5fb);color:#25313d}.a2a-scenario-card__eyebrow{margin-bottom:5px;color:#5b7b99;font-size:10px;font-weight:800;letter-spacing:.08em}.a2a-scenario-card__body h4{margin:0 0 13px;color:#274761;font-size:15px;line-height:1.35}.a2a-scenario-card__department{display:flex;align-items:center;gap:7px;margin-bottom:12px}.a2a-scenario-card__department span,.a2a-scenario-card__request>span{color:#71869b;font-size:10px;font-weight:800;letter-spacing:.04em}.a2a-scenario-card__department strong{display:inline-block;padding:4px 7px;border-radius:999px;background:#dcebf7;color:#365d7c;font-size:11px;line-height:1.25}.a2a-scenario-card__request{padding:10px;border-radius:8px;background:rgba(255,255,255,.8);border:1px solid #e1e9f0}.a2a-scenario-card__request p{margin:5px 0 0;color:#425d73;font-size:12px;line-height:1.55;word-break:keep-all}.a2a-scenario-card button{width:calc(100% - 24px)!important;min-height:34px;margin:0 12px 12px!important;border:1px solid #769bbc!important;border-radius:8px!important;background:#fff!important;color:#315a7b!important;font-size:12px!important;font-weight:800!important}.a2a-scenario-card button:hover{border-color:#3f78a5!important;background:#edf6ff!important;color:#1d4f78!important}@media(max-width:900px){#a2a-scenario-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.a2a-group-chat__messages{padding:14px 10px}.a2a-group-chat__row>div:last-child{max-width:calc(100% - 42px)}.a2a-group-chat__evidence-tooltip::after{left:auto;right:0;max-width:calc(100vw - 64px)}#a2a-scenario-card-grid{grid-template-columns:1fr}.a2a-scenario-card__body{min-height:0}}
     """
     css += """
-    /* KakaoTalk-inspired group-chat treatment: familiar hierarchy without changing chat data. */
+    /* Legacy group-chat treatment; the SAP Joule rules below take final precedence. */
     .a2a-chat-shell{border:0!important;border-radius:16px!important;background:#b2c7d9!important;box-shadow:0 5px 18px rgba(57,78,97,.13)}
     .a2a-group-chat{background:#b2c7d9!important;border:0!important;border-radius:16px 16px 0 0!important}
     .a2a-group-chat__header{min-height:56px;padding:9px 15px!important;background:#fee500!important;color:#1f1f1f!important;box-shadow:inset 0 -1px rgba(0,0,0,.09)}
     .a2a-group-chat__room-title{display:flex;gap:9px;align-items:center}.a2a-group-chat__room-avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:12px;background:#3c1e1e;color:#fee500;font-size:14px;font-weight:900}.a2a-group-chat__room-title b{display:block;font-size:14px;line-height:1.2}.a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar){display:block;margin-top:2px;color:#665e20;font-size:10px;line-height:1.2}.a2a-group-chat__room-status{align-self:center;color:#665e20;font-size:11px;font-weight:700}.a2a-group-chat__room-status::before{display:inline-block;width:6px;height:6px;margin:0 4px 1px 0;border-radius:50%;background:#48a868;content:""}
-    .a2a-group-chat__messages{max-width:980px;padding:18px!important;background:#b2c7d9}.a2a-group-chat__row{gap:9px;margin-bottom:15px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}.a2a-group-chat__avatar{width:35px;height:35px;border:1px solid rgba(55,76,93,.16);background:#f7f7f7!important;color:#435867!important;font-size:12px;box-shadow:0 1px 2px rgba(58,75,91,.16)!important}.a2a-group-chat__sender{margin:1px 0 4px!important;color:#324755!important;font-size:11px!important;font-weight:800}.a2a-group-chat__bubble{position:relative;padding:10px 12px!important;border:0!important;border-radius:3px 13px 13px 13px!important;background:#fff!important;color:#202124!important;line-height:1.6!important;box-shadow:0 1px 1px rgba(50,67,82,.13)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before{position:absolute;top:9px;left:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,100% 100%)}
+    .a2a-group-chat__messages{max-width:980px;padding:18px!important;background:#b2c7d9}.a2a-group-chat__row{gap:9px;margin-bottom:15px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}.a2a-group-chat__avatar{width:35px;height:35px;border:1px solid rgba(55,76,93,.16);background:#f7f7f7!important;color:#435867!important;font-size:12px;box-shadow:0 1px 2px rgba(58,75,91,.16)!important;overflow:hidden!important}.a2a-group-chat__sender{margin:1px 0 4px!important;color:#324755!important;font-size:11px!important;font-weight:800}.a2a-group-chat__bubble{position:relative;padding:10px 12px!important;border:0!important;border-radius:3px 13px 13px 13px!important;background:#fff!important;color:#202124!important;line-height:1.6!important;box-shadow:0 1px 1px rgba(50,67,82,.13)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before{position:absolute;top:9px;left:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,100% 100%)}
     .a2a-group-chat__row--field{justify-content:flex-end}.a2a-group-chat__row--field .a2a-group-chat__avatar{order:2;border-color:rgba(91,77,0,.16);background:#fff3a7!important;color:#665300!important}.a2a-group-chat__row--field>div:last-child{display:flex;flex-direction:column;align-items:flex-end}.a2a-group-chat__row--field .a2a-group-chat__sender{text-align:right}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-radius:13px 3px 13px 13px!important;background:#fee500!important}.a2a-group-chat__row--field .a2a-group-chat__bubble::after{position:absolute;top:9px;right:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,0 100%)}
-    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;background:#665b93!important;color:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-radius:3px 13px 13px 13px!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f5f3fb!important}.a2a-group-chat__row--field .a2a-group-chat__section{background:rgba(255,255,255,.52)!important}
+    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;border-color:rgba(10,110,209,.28);background:#fff!important;color:inherit!important}.a2a-group-chat__brand-avatar{display:block;width:76%;height:76%;max-width:76%;max-height:76%;border-radius:50%;object-fit:contain;flex:none}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-radius:3px 13px 13px 13px!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f5f3fb!important}.a2a-group-chat__row--field .a2a-group-chat__section{background:rgba(255,255,255,.52)!important}
     .a2a-group-chat__title{margin-bottom:7px!important;color:#655b90!important}.a2a-group-chat__section{margin-top:6px!important;padding:7px 8px!important;border-radius:8px!important;background:#f3f6f8!important}.a2a-group-chat__section-label{color:#617586!important}.a2a-group-chat__subagent-card{border:0!important;border-radius:9px!important;background:#f3f6f8!important;box-shadow:inset 0 0 0 1px rgba(101,121,136,.12)}.a2a-group-chat__subagent-next,.a2a-group-chat__subagent-meta{border-top-color:#dbe3e9!important}.a2a-group-chat__tool-chip,.a2a-group-chat__evidence-tooltip{border-color:#d4dde4!important;background:#fff!important;color:#536a7b!important}.a2a-group-chat__system{margin:6px auto 14px!important;padding:5px 10px!important;background:rgba(71,93,111,.50)!important;color:#fff!important;font-size:10px!important;box-shadow:0 1px 1px rgba(50,67,82,.1)}
     .a2a-group-chat__team-card{padding:10px;border:0;border-radius:9px;background:#f3f6f8;box-shadow:inset 0 0 0 1px rgba(101,121,136,.12)}.a2a-group-chat__team-summary>span,.a2a-group-chat__team-next>span,.a2a-group-chat__team-sql>span{display:block;margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__team-summary p,.a2a-group-chat__team-next p{margin:0}.a2a-group-chat__team-summary ul,.a2a-group-chat__team-next ul{margin:0;padding-left:17px}.a2a-group-chat__team-sql{margin-top:9px;padding-top:9px;border-top:1px solid #dbe3e9}.a2a-group-chat__team-sql pre,.a2a-group-chat__team-sql pre code{max-height:230px;margin:0;overflow:auto;padding:9px;border-radius:7px;background:#202b36!important;color:#eaf2f8!important;font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace!important;white-space:pre}.a2a-group-chat__team-sql pre code{display:block;padding:0}.a2a-group-chat__team-next{margin-top:9px;padding-top:9px;border-top:1px solid #dbe3e9}.a2a-group-chat__team-meta{display:flex;justify-content:flex-end;margin-top:10px;padding-top:9px;border-top:1px solid #dbe3e9}
     .a2a-chat-shell,.a2a-group-chat{overflow-x:hidden!important}.a2a-group-chat__messages{overflow-x:hidden!important;overflow-y:auto!important}.a2a-group-chat__row,.a2a-group-chat__row>div:last-child,.a2a-group-chat__bubble{min-width:0}.a2a-group-chat__bubble,.a2a-group-chat__section-body,.a2a-group-chat__subagent-card,.a2a-group-chat__team-card{overflow-wrap:anywhere;word-break:break-word}
@@ -2099,7 +2319,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     #a2a-agent-cards-modal{height:min(760px,82vh)}.a2a-topology{display:flex;max-height:none;height:100%;overflow:hidden;flex-direction:column}.a2a-topology__layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.a2a-topology__sidebar{display:flex;gap:6px;min-height:0;padding:12px;border-right:1px solid #d9e4ee;background:#f3f7fa;overflow-y:auto;flex-direction:column}.a2a-topology__team-select{width:100%;padding:10px;border:1px solid transparent;border-radius:9px;background:transparent;color:#4d657d;text-align:left;cursor:pointer}.a2a-topology__team-select:hover{background:#e9f1f8}.a2a-topology__team-select[aria-selected="true"]{border-color:#9abbd8;background:#fff;color:#284b69;box-shadow:0 1px 2px rgba(40,72,100,.08)}.a2a-topology__team-select b{display:block;font-size:12px}.a2a-topology__team-select span{display:-webkit-box;margin-top:4px;color:#6a8297;font-size:10px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.a2a-topology__detail{min-height:0;padding:16px;overflow-y:auto}.a2a-topology__team-panel{border:1px solid #d6e1eb;border-radius:12px;background:#fff;overflow:hidden}.a2a-topology__team-panel>p{margin:0;padding:10px 14px;color:#4d657d;font-size:12px;line-height:1.5}.a2a-topology__subagent-heading{padding:10px 14px;border-top:1px solid #e2eaf1;border-bottom:1px solid #e2eaf1;background:#f8fbfd;color:#587086;font-size:11px;font-weight:800}.a2a-topology__subagents{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin:0;padding:14px;list-style:none}.a2a-topology__subagent::before{display:none}.a2a-topology__subagent{min-width:0}.a2a-topology__tools{margin-top:7px}@media(max-width:700px){#a2a-agent-cards-modal{height:min(760px,calc(100vh - 16px))}.a2a-topology__layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.a2a-topology__sidebar{display:flex;max-height:116px;border-right:0;border-bottom:1px solid #d9e4ee;overflow-x:auto;overflow-y:hidden;flex-direction:row}.a2a-topology__team-select{min-width:160px}.a2a-topology__detail{padding:10px}.a2a-topology__subagents{grid-template-columns:1fr;padding:10px}}
     """
     css += """
-    #a2a-page-toolbar{justify-content:flex-end!important;align-items:center!important;min-height:0!important;margin:0 0 8px!important;gap:0!important}#a2a-page-toolbar>.gr-column{flex:0 0 auto!important;min-width:0!important}#a2a-agent-cards-open{width:auto!important;min-width:0!important;min-height:29px!important;padding:5px 10px!important;border:1px solid #c8d6e2!important;border-radius:8px!important;background:#fff!important;color:#425f79!important;font-size:11px!important;font-weight:800!important;box-shadow:0 1px 2px rgba(40,58,74,.08)!important}#a2a-agent-cards-open:hover{border-color:#789ab7!important;background:#f3f8fc!important;color:#274e70!important}
+    #a2a-page-toolbar{justify-content:flex-end!important;align-items:center!important;min-height:0!important;margin:0 0 8px!important;gap:6px!important}#a2a-page-toolbar>.gr-column{flex:0 0 auto!important;min-width:0!important}#a2a-agent-cards-open,#a2a-chat-reset,#a2a-chat-pause{width:auto!important;min-width:0!important;min-height:29px!important;padding:5px 10px!important;border:1px solid #c8d6e2!important;border-radius:8px!important;background:#fff!important;color:#425f79!important;font-size:11px!important;font-weight:800!important;box-shadow:0 1px 2px rgba(40,58,74,.08)!important}#a2a-agent-cards-open:hover,#a2a-chat-reset:hover{border-color:#789ab7!important;background:#f3f8fc!important;color:#274e70!important}#a2a-chat-pause{border-color:#d5bd80!important;color:#765c15!important}#a2a-chat-pause:hover{border-color:#b7974b!important;background:#fff9e8!important;color:#624b0d!important}
     """
     css += """
     .a2a-group-chat__approval-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.a2a-group-chat__approval-button{padding:6px 9px;border:0;border-radius:7px;font-size:11px;font-weight:800;line-height:1.3;cursor:pointer}.a2a-group-chat__approval-button--send{background:#fee500;color:#3c3100}.a2a-group-chat__approval-button--send:hover{background:#f4da00}.a2a-group-chat__approval-button--cancel{background:#edf1f5;color:#516373}.a2a-group-chat__approval-button--cancel:hover{background:#dfe7ed}.a2a-group-chat__approval-button:disabled{opacity:.7;cursor:default}.a2a-group-chat__system:has(.a2a-group-chat__hitl-fallback-button){display:flex;align-items:center;gap:8px;max-width:min(92%,680px);border-radius:11px;text-align:left;line-height:1.45}.a2a-group-chat__hitl-fallback-button{flex:none;padding:6px 9px;border:0;border-radius:7px;background:#fee500;color:#3c3100;font-size:11px;font-weight:800;line-height:1.3;cursor:pointer}.a2a-group-chat__hitl-fallback-button:hover{background:#f4da00}.a2a-group-chat__hitl-fallback-button:disabled{opacity:.7;cursor:default}.a2a-hidden-hitl-action,.a2a-hidden-chat-action{display:none!important}@media(max-width:700px){.a2a-group-chat__approval-actions{align-items:stretch;flex-direction:column}.a2a-group-chat__approval-button{width:100%}.a2a-group-chat__system:has(.a2a-group-chat__hitl-fallback-button){display:block}.a2a-group-chat__hitl-fallback-button{display:block;width:100%;margin-top:7px}}
@@ -2129,15 +2349,35 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     /* Keep both conversations stable in the notebook: messages scroll inside a fixed viewport. */
     .a2a-dual-chat-layout .a2a-group-chat__messages{box-sizing:border-box!important;height:600px!important;min-height:600px!important;max-height:600px!important;flex:0 0 600px!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain}@media(max-width:900px){.a2a-dual-chat-layout .a2a-group-chat__messages{height:400px!important;min-height:400px!important;max-height:400px!important;flex-basis:400px!important}}
     """
+    css += """
+    /* SAP Joule / Fiori conversation surface, shared with the base A2A chat. */
+    .a2a-chat-shell{border:1px solid #d9d5e7!important;border-radius:16px!important;background:#fff!important;box-shadow:0 2px 10px rgba(58,42,91,.10)!important}
+    .a2a-group-chat{border:0!important;border-radius:16px 16px 0 0!important;background:#fff!important}
+    .a2a-group-chat__header{min-height:58px;padding:10px 16px!important;background:linear-gradient(105deg,#0a6ed1 0%,#4f36b7 56%,#805ad5 100%)!important;color:#fff!important;box-shadow:none!important}
+    .a2a-group-chat__room-avatar{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.18)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.26)}
+    .a2a-group-chat__room-title b{color:#fff!important}.a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar),.a2a-group-chat__room-status{color:rgba(255,255,255,.84)!important}.a2a-group-chat__room-status::before{background:#7ee2b8!important}
+    .a2a-group-chat__messages{box-sizing:border-box!important;width:100%!important;max-width:none!important;margin:0!important;padding:18px!important;background:#f7f6fb!important}.a2a-group-chat__row{gap:10px;margin-bottom:16px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}
+    .a2a-group-chat__avatar{width:35px;height:35px;border:1px solid #ddd8e9!important;background:#fff!important;color:#536273!important;box-shadow:0 1px 3px rgba(56,43,88,.12)!important;overflow:hidden!important}.a2a-group-chat__sender{margin:1px 0 5px!important;color:#3a4655!important;font-size:11px!important;font-weight:800}
+    .a2a-group-chat__bubble{padding:11px 13px!important;border:1px solid #e0ddea!important;border-radius:12px!important;background:#fff!important;color:#25313d!important;line-height:1.6!important;box-shadow:0 1px 2px rgba(55,41,85,.06)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before,.a2a-group-chat__row--field .a2a-group-chat__bubble::after{display:none!important}
+    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;border-color:#cfc3ed!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-color:#d6c9f3!important;background:#f8f5ff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f0eaff!important}
+    .a2a-group-chat__row--field{justify-content:flex-end}.a2a-group-chat__row--field .a2a-group-chat__avatar{order:2;border-color:#cbbcf0!important;background:#f4efff!important;color:#6143a6!important}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-color:#cbbcf0!important;border-radius:12px!important;background:linear-gradient(135deg,#f4efff,#ebe3ff)!important}.a2a-group-chat__row--field>div:last-child{align-items:flex-end}.a2a-group-chat__row--field .a2a-group-chat__sender{text-align:right}
+    .a2a-group-chat__title{color:#5336a6!important}.a2a-group-chat__section{margin-top:7px!important;border-radius:9px!important;background:#f5f4f8!important}.a2a-group-chat__section-label{color:#66558c!important}.a2a-group-chat__subagent-card,.a2a-group-chat__team-card{border:1px solid #e3deed!important;background:#fbfaff!important;box-shadow:none!important}.a2a-group-chat__tool-chip,.a2a-group-chat__evidence-tooltip{border-color:#d8d0e8!important;background:#fff!important;color:#5b4d7b!important}.a2a-group-chat__system{border:1px solid #dce1e8!important;border-radius:999px!important;background:#eef0f4!important;color:#526171!important;box-shadow:none!important}
+    .a2a-group-chat__new-message{background:#5d3ec1!important;color:#fff!important;box-shadow:0 2px 8px rgba(72,49,151,.24)!important}.a2a-group-chat__new-message:hover{background:#4c30aa!important}.a2a-chat-composer{padding:11px 12px 12px!important;border-top:1px solid #e2deeb!important;background:#fff!important}.a2a-chat-composer textarea{min-height:44px!important;border:1px solid #cfc8df!important;border-radius:10px!important;background:#fff!important;color:#243241!important;box-shadow:none!important}.a2a-chat-composer textarea:focus{border-color:#7452cc!important;box-shadow:0 0 0 2px rgba(116,82,204,.18)!important}
+    #a2a-page-toolbar-host{margin:0 0 8px!important;padding:0!important}#a2a-page-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:7px;flex-wrap:wrap;margin:0;padding:0}.a2a-chat-toolbar__button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:0;height:32px;padding:6px 10px;border:1px solid #d4cde3;border-radius:8px;background:#fff;color:#49377a;font:800 12px/1.2 inherit;white-space:nowrap;word-break:keep-all;box-shadow:none;cursor:pointer}.a2a-chat-toolbar__button:hover{border-color:#7a58cc;background:#f6f2ff;color:#432b94}.a2a-chat-toolbar__reset{min-width:82px}.a2a-chat-toolbar__pause{min-width:88px;border-color:#bca8e8;color:#5138a5}.a2a-chat-toolbar__agent{min-width:72px}
+    .a2a-group-chat__approval-button--send,.a2a-group-chat__hitl-fallback-button{background:#5d3ec1!important;color:#fff!important}.a2a-group-chat__approval-button--send:hover,.a2a-group-chat__hitl-fallback-button:hover{background:#4c30aa!important}.a2a-group-chat__approval-button--cancel{background:#eef0f4!important;color:#4f5e6d!important}.a2a-group-chat__approval-button--cancel:hover{background:#e1e5ea!important}
+    .a2a-harness-shell{border-color:#d8d0ec!important;background:#fff!important}.a2a-harness-shell .a2a-group-chat{background:#fff!important}.a2a-harness-shell .a2a-group-chat__header{background:linear-gradient(105deg,#5b3fa9,#8a5cd1)!important;color:#fff!important}.a2a-harness-shell .a2a-group-chat__room-avatar{background:rgba(255,255,255,.2)!important;color:#fff!important}.a2a-harness-shell .a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar),.a2a-harness-shell .a2a-group-chat__room-status{color:rgba(255,255,255,.84)!important}.a2a-harness-shell .a2a-group-chat__room-status::before{background:#c4b5fd!important}.a2a-harness-shell .a2a-group-chat__messages{background:#fbfaff!important}.a2a-harness-shell .a2a-group-chat__section{background:#f4f0ff!important}.a2a-harness-action select{border-color:#cfc2ee!important}.a2a-harness-action button{background:#5d3ec1!important;color:#fff!important}.a2a-harness-action button:hover{background:#4c30aa!important}.a2a-harness-shell .a2a-group-chat__system:has(.a2a-harness-action){background:#6c50bb!important;color:#fff!important}.a2a-harness-dashboard{border-color:#d9cfef!important;background:#fbfaff!important;color:#49377a!important}.a2a-harness-dashboard>p{color:#6b5a96!important}.a2a-harness-dashboard thead th{background:#eee8ff!important;color:#50398e!important}
+    .a2a-harness-option{padding:10px;border:1px solid #ded5f0;border-radius:10px;background:#fff}.a2a-harness-option>div{display:flex;gap:7px;align-items:center;color:#443177}.a2a-harness-option p{margin:7px 0;color:#4e4661;font-size:12px;line-height:1.5}.a2a-harness-option>span{display:block;margin-top:8px;color:#7059a0;font-size:10px;font-weight:800}.a2a-harness-option ul{margin:4px 0 0;padding-left:17px;color:#5a526b;font-size:11px;line-height:1.5}.a2a-harness-option__meta{display:grid!important;gap:5px!important;margin-top:8px;padding:8px!important;border-radius:8px!important;background:#f8f6ff!important}.a2a-harness-option__meta span{display:block!important;margin:0!important;color:#5a4d7d!important;font-size:10px!important;font-weight:500!important;line-height:1.4!important}.a2a-harness-option__meta b{color:#4a3980}.a2a-harness-option__build{justify-self:start;padding:3px 6px;border-radius:999px;background:#e9f7ed;color:#17683c;font-size:10px;font-style:normal;font-weight:800}.a2a-harness-option__build--required{background:#fff0d6;color:#8a5200}.a2a-harness-recommendation{display:inline-block!important;margin:0!important;padding:3px 6px;border-radius:999px;background:#ede6ff;color:#5133a0!important;font-size:10px!important;white-space:nowrap}.a2a-harness-chat .a2a-group-chat__row--field .a2a-group-chat__bubble:has(.a2a-harness-action){width:min(100%,480px);padding:12px!important;border:1px solid #d9cfef!important;border-radius:12px!important;background:#fff!important;color:#31294a!important;box-shadow:0 2px 6px rgba(72,49,151,.09)!important}.a2a-harness-action{display:grid;gap:8px;color:#31294a!important;text-align:left}.a2a-harness-action>span{display:block!important;margin:0!important;color:#51486a!important;font-size:12px!important;font-weight:800!important;line-height:1.35!important}.a2a-harness-action select{box-sizing:border-box;width:100%;height:36px!important;padding:0 10px!important;border:1px solid #cfc2ee!important;border-radius:8px!important;background:#fff!important;color:#413464!important;font-size:12px!important;font-weight:700!important}.a2a-harness-action textarea{display:block;box-sizing:border-box;width:100%;min-height:48px!important;height:48px!important;margin:0!important;padding:8px 10px!important;border:1px solid #cfc2ee;border-radius:8px;background:#fff;color:#342a4f;font:12px/1.35 inherit;resize:vertical}.a2a-harness-action textarea::placeholder{color:#7e7494;opacity:1}.a2a-harness-action textarea:focus{outline:0;border-color:#7452cc;box-shadow:0 0 0 2px rgba(116,82,204,.18)}.a2a-harness-action button{width:fit-content!important;min-width:128px!important;height:32px!important;margin-top:0!important;padding:6px 12px!important;border-radius:8px!important;font-size:12px!important}.a2a-harness-shell .a2a-group-chat__system:has(.a2a-harness-action--rollback){box-sizing:border-box!important;width:min(100%,500px)!important;max-width:calc(100% - 24px)!important;margin:10px auto 14px!important;padding:10px 12px!important;border:1px solid #d9cfef!important;border-radius:10px!important;background:#fff!important;color:#31294a!important;box-shadow:0 1px 3px rgba(72,49,151,.08)!important}.a2a-harness-action--rollback{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-width:0!important}.a2a-harness-action--rollback>span{flex:1!important;color:#5d5470!important;font-size:11px!important;font-weight:600!important}.a2a-harness-action--rollback button{flex:none!important;min-width:0!important;height:30px!important;padding:5px 11px!important;border:1px solid #d1c5ed!important;background:#f6f2ff!important;color:#5838aa!important}.a2a-harness-action--rollback button:hover{border-color:#9f87dc!important;background:#ece5ff!important}
+    @media(max-width:700px){.a2a-group-chat__messages{padding:14px 10px!important}.a2a-group-chat__room-status{display:none}.a2a-group-chat__bubble{font-size:12px}.a2a-group-chat__row>div:last-child{max-width:calc(100% - 45px)}}
+    """
     with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
-        with gr.Row(elem_id="a2a-page-toolbar"):
-            gr.Button(
-                "Agent 정보",
-                elem_id="a2a-agent-cards-open",
-                size="sm",
-                scale=0,
-                min_width=0,
-            )
+        gr.HTML(
+            "<div id=\"a2a-page-toolbar\">"
+            "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__reset\" data-a2a-chat-toolbar-action=\"reset\">채팅 초기화</button>"
+            "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__pause\" data-a2a-chat-toolbar-action=\"pause\">⏸ 일시정지</button>"
+            "<button type=\"button\" id=\"a2a-agent-cards-open\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__agent\">Agent 정보</button>"
+            "</div>",
+            elem_id="a2a-page-toolbar-host",
+        )
         with gr.Row(elem_classes=["a2a-dual-chat-layout"]):
             with gr.Column(scale=3, elem_classes=["a2a-chat-shell"]):
                 gr.HTML(
@@ -2161,12 +2401,12 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 elem_classes=["a2a-chat-shell", "a2a-harness-shell"],
             ):
                 harness_chat = gr.HTML(
-                    _harness_chat_html(),
+                    _trace_harness_chat_html(),
                     label="Harness² comparison conversation",
                     elem_id="a2a-harness-chat",
                 )
                 harness_dashboard = gr.HTML(
-                    _harness_dashboard_html(),
+                    _trace_harness_dashboard_html(),
                     label="Harness² flow improvement dashboard",
                     elem_id="a2a-harness-dashboard",
                 )
@@ -2175,6 +2415,16 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             elem_id="a2a-chat-payload",
             elem_classes=["a2a-chat-payload"],
         )
+        reset_chat_button = gr.Button(
+            "채팅 초기화",
+            elem_id="a2a-chat-reset-action",
+            elem_classes=["a2a-hidden-chat-action"],
+        )
+        pause_chat_button = gr.Button(
+            "일시정지",
+            elem_id="a2a-chat-pause-action",
+            elem_classes=["a2a-hidden-chat-action"],
+        )
         approval_state = gr.State([])
         harness_choice = gr.Textbox(
             "",
@@ -2182,14 +2432,30 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             elem_classes=["a2a-hidden-chat-action"],
             container=False,
         )
+        harness_comment = gr.Textbox(
+            "",
+            elem_id="a2a-harness-comment",
+            elem_classes=["a2a-hidden-chat-action"],
+            container=False,
+        )
+        harness_analyse_button = gr.Button(
+            "실행 로그로 개선안 만들기",
+            elem_id="a2a-harness-analyse",
+            elem_classes=["a2a-hidden-chat-action"],
+        )
         harness_run_button = gr.Button(
             "Harness² 비교 실행",
             elem_id="a2a-harness-run",
             elem_classes=["a2a-hidden-chat-action"],
         )
         harness_adopt_button = gr.Button(
-            "선택 후보를 세션에 채택",
+            "선택·의견 반영",
             elem_id="a2a-harness-adopt",
+            elem_classes=["a2a-hidden-chat-action"],
+        )
+        harness_apply_button = gr.Button(
+            "선택·의견 반영",
+            elem_id="a2a-harness-apply",
             elem_classes=["a2a-hidden-chat-action"],
         )
         harness_rollback_button = gr.Button(
@@ -2214,8 +2480,9 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         last_outcome = gr.State(None)
         harness_experiment = gr.State(None)
         active_harness = gr.State("")
+        active_grounding = gr.State("")
         with (
-            gr.Accordion("업무 시나리오", open=False),
+            gr.Accordion("업무 시나리오", open=True),
             gr.Row(
                 elem_id="a2a-scenario-card-grid",
                 elem_classes=["a2a-scenario-cards"],
@@ -2255,7 +2522,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             outputs=requester_department,
             queue=False,
         )
-        request.submit(
+        workflow_event = request.submit(
             run_workflow,
             inputs=[
                 request,
@@ -2264,10 +2531,21 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 approval_state,
                 last_outcome,
                 active_harness,
+                active_grounding,
                 harness_experiment,
             ],
             outputs=workflow_outputs,
             queue=True,
+            scroll_to_output=False,
+        )
+        pause_chat_button.click(
+            pause_chat, cancels=[workflow_event], queue=False, scroll_to_output=False
+        )
+        reset_chat_button.click(
+            reset_chat,
+            outputs=[*workflow_outputs, active_harness, active_grounding],
+            cancels=[workflow_event],
+            queue=False,
             scroll_to_output=False,
         )
         send_email_button.click(
@@ -2284,26 +2562,28 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             queue=False,
             scroll_to_output=False,
         )
-        harness_run_button.click(
+        harness_analyse_button.click(
             run_harness_panel,
-            inputs=[request, last_outcome],
+            inputs=[request, last_outcome, chat_history],
             outputs=[
                 harness_chat,
                 harness_experiment,
                 harness_choice,
                 harness_dashboard,
                 active_harness,
+                active_grounding,
             ],
             queue=True,
             scroll_to_output=False,
         )
-        harness_adopt_button.click(
+        harness_apply_button.click(
             adopt_harness_panel,
-            inputs=[harness_experiment, harness_choice],
+            inputs=[harness_experiment, harness_choice, harness_comment],
             outputs=[
                 harness_chat,
                 harness_experiment,
                 active_harness,
+                active_grounding,
                 harness_dashboard,
             ],
             queue=False,
@@ -2316,6 +2596,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 harness_chat,
                 harness_experiment,
                 active_harness,
+                active_grounding,
                 harness_dashboard,
             ],
             queue=False,

@@ -1,6 +1,16 @@
-# 04 · Agent Patterns
-
-동일한 F&B 도메인에서 workflow, tool calling, A2A, Advanced A2A를 비교합니다. Agent 수가 아니라 **제어 흐름·도구 권한·조직 경계**가 어떻게 달라지는지 확인하는 단계입니다.
+<table>
+  <tr>
+    <td width="48%" valign="top">
+      <h1>04 · Agent Patterns</h1>
+      <p>동일한 F&amp;B 도메인에서 workflow, tool calling, A2A, Advanced A2A를 비교합니다. Agent 수가 아니라 <strong>제어 흐름·도구 권한·조직 경계</strong>가 어떻게 달라지는지 확인하는 단계입니다.</p>
+    </td>
+    <td width="52%" valign="top">
+      <a href="notebooks/04_agent_to_agent_advanced.ipynb">
+        <img src="assets/thumbnails/04_agent_to_agent_advanced_workflow.svg" alt="Advanced A2A workflow" width="100%">
+      </a>
+    </td>
+  </tr>
+</table>
 
 > 공통 환경 설정과 JupyterLab 실행은 [루트 README](../README.md)에서 진행합니다. A2A 노트북은 별도 로컬 Agent 서버가 준비된 뒤 실행합니다.
 
@@ -31,8 +41,9 @@
 | [02_agent_loop_mcp.ipynb](notebooks/02_agent_loop_mcp.ipynb) | Tool calling loop | 관찰 → 읽기 전용 도구 호출 → 재관찰의 반복과 Agent graph를 확인합니다. 별도 MCP 서버는 필요하지 않습니다. |
 | [03_agent_to_agent.ipynb](notebooks/03_agent_to_agent.ipynb) | A2A | F&B Team Agent가 A2A Protocol 1.0의 Message·Task·Artifact로 handoff하는 방식을 확인합니다. |
 | [04_agent_to_agent_advanced.ipynb](notebooks/04_agent_to_agent_advanced.ipynb) | Advanced A2A | Team 단위 협업과 선택적 Codex App Server·SQL Generator Agent의 역할을 확인합니다. |
+| [05_build_your_harness.ipynb](notebooks/05_build_your_harness.ipynb) | Build your harness | SAP BTP, Integration Suite MCP, Joule, HANA Cloud, LeanIX Agent Hub를 Harness에 연결하는 아키텍처와 구현 우선순위를 설계합니다. |
 
-01부터 04까지 순서대로 실행하면, 단일 workflow에서 조직 경계를 넘는 Agent 협업까지 제어 범위가 확장되는 모습을 비교할 수 있습니다.
+01부터 04까지 실행하면 단일 workflow에서 조직 경계를 넘는 Agent 협업까지 제어 범위가 확장되는 모습을 비교할 수 있습니다. 05는 이를 SAP BTP의 운영 Harness로 확장하는 Markdown 설계 노트북입니다.
 
 </details>
 

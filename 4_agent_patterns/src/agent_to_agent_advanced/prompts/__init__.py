@@ -44,4 +44,7 @@ def get_optional_prompt(name: str) -> str | None:
 
 def render_prompt(name: str, /, **values: Any) -> str:
     """Render a prompt resource with explicit runtime values only."""
+    # Older notebook cells and prompt-inspection tests may render an A2A prompt
+    # outside a chat session.  An absent transcript is the empty transcript.
+    values.setdefault("conversation_history", "[]")
     return get_prompt(name).format(**values)

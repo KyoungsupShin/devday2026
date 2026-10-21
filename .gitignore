@@ -21,6 +21,12 @@ results/
 **/results/
 4_agent_patterns/artifacts/debug/
 
+# 교육용 SAP RPT holdout 결과는 팀 검토를 위해 Git 추적을 허용합니다.
+!3_gen_ai_hub_services/results/
+!3_gen_ai_hub_services/results/rpt_risk/
+!3_gen_ai_hub_services/results/rpt_risk/*.csv
+!3_gen_ai_hub_services/results/rpt_risk/README.md
+
 # === 로컬 확장 실습 (Git 미반영) ===
 /5_harness/
 /6_Business_issue/

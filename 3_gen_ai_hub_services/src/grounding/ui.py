@@ -22,6 +22,8 @@ _UI_CSS = """
 .document-empty { color: #5f6368; font-size: .92em; }
 """
 
+_DEFAULT_SOP_QUESTION = "현장 작업자의 설비 부품 구매 요청은 어떤 순서로 검토해야 하나요?"
+
 
 def _document_id(document: dict[str, Any]) -> str:
     value = document.get("id") or document.get("documentId")
@@ -153,7 +155,10 @@ def build_grounding_ui():
         gr.Markdown("# Custom Repository Grounding")
         with gr.Tabs():
             with gr.Tab("Direct upload"):
-                gr.Markdown("UTF-8 `.txt` 또는 `.md` 파일을 vector repository에 직접 인덱싱합니다.")
+                gr.Markdown(
+                    "UTF-8 `.txt` 또는 `.md` SOP 문서를 vector repository에 직접 인덱싱합니다. "
+                    "예제: `data/context/interdepartmental_collaboration_sop.md`"
+                )
                 direct_file = gr.File(label="문서 파일", file_types=[".txt", ".md"], type="filepath")
                 direct_button = gr.Button("문서 업로드", variant="primary")
             with gr.Tab("Object Storage → Grounding"):
@@ -167,10 +172,12 @@ def build_grounding_ui():
                 object_button = gr.Button("Object Storage 저장 및 Grounding 포함", variant="primary")
             with gr.Tab("Ground"):
                 gr.Markdown(
-                    "왼쪽 Repository의 문서를 근거로 답변합니다. grounding.data에는 서비스가 반환한 "
-                    "문서·chunk·citation 메타데이터가 있을 때만 표시됩니다."
+                    "업로드한 SOP 문서만 근거로 답합니다. 문서 밖의 승인·구매·시스템 변경은 결정하지 않습니다."
                 )
-                question = gr.Textbox(label="Question", lines=4, placeholder="문서에 관해 질문하세요.")
+                question = gr.Textbox(
+                    label="SOP 질문", lines=3, value=_DEFAULT_SOP_QUESTION,
+                    placeholder="SOP 절차 또는 역할에 관해 질문하세요.",
+                )
                 ask_button = gr.Button("Grounded answer 생성", variant="primary")
                 answer = gr.JSON(label="Grounded answer and evidence", min_height=320)
             with gr.Tab("Delete"):

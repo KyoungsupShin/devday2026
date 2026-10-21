@@ -454,6 +454,10 @@ SCENARIO_REQUESTS = (
         "생산라인 Cost Center 변경",
         "다음 분기부터 음료 1라인의 Cost Center를 변경해 주세요.",
     ),
+    (
+        "Codex SQL · 고객 주문 Top 10 조회",
+        "SAP HANA의 고객 주문 테이블에서 고객별 주문 건수와 순 주문금액 상위 10개를 조회해 주세요.",
+    ),
 )
 SCENARIO_REQUEST_DEPARTMENTS = {
     "기존 원부자재 추가 발주": "제조운영 · 생산관리",
@@ -461,4 +465,5 @@ SCENARIO_REQUEST_DEPARTMENTS = {
     "환율·원자재 가격 변동 사업성 평가": "경영기획 · 사업관리",
     "신규 원부자재 등록·생산 투입": "R&D · 제조기획",
     "생산라인 Cost Center 변경": "재무 · 관리회계",
+    "Codex SQL · 고객 주문 Top 10 조회": "데이터 분석 · 영업운영",
 }

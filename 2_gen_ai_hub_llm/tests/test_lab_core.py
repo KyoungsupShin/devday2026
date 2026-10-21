@@ -12,14 +12,20 @@ sys.path.insert(0, str(ROOT / "1_gen_ai_hub" / "src"))
 sys.path.insert(0, str(ROOT / "2_gen_ai_hub_llm"))
 
 from lab_common.config import Settings
-from src.prompt_model.lab_core import compare_prompts, run_chat, run_chat_stream
+from src.prompt_model.lab_core import (
+    DEFAULT_COMPARISON_SYSTEM_PROMPT,
+    compare_prompts,
+    run_chat,
+    run_chat_stream,
+)
 from src.embeddings.lab_core import (
+    append_embedding_cluster_point,
+    compare_and_append_embedding_clusters,
     compare_embeddings,
     cosine_similarity,
     retrieve_similar_texts,
 )
 from src.business_embedding.lab_core import (
-    label_image,
     holdout_indices_by_label,
     recommend_business_queue,
     run_business_embedding_lab,
@@ -55,6 +61,7 @@ class LabCoreTests(unittest.TestCase):
             calls[0][0], [{"role": "user", "content": "LLM이 무엇인가요?"}]
         )
         self.assertEqual(calls[1][0][0]["role"], "system")
+        self.assertEqual(calls[1][0][0]["content"], DEFAULT_COMPARISON_SYSTEM_PROMPT)
         self.assertEqual(calls[1][0][1]["role"], "user")
         self.assertIsNone(calls[0][1])
         json.dumps(outcome)
@@ -66,6 +73,28 @@ class LabCoreTests(unittest.TestCase):
                 settings(),
                 chat_caller=lambda *_: self.fail("SDK should not be called"),
             )
+
+    def test_compare_prompts_uses_a_user_supplied_system_prompt(self):
+        calls: list[tuple[list[dict[str, str]], str | None]] = []
+
+        def fake_chat(_settings, messages, model):
+            calls.append((messages, model))
+            return "answer"
+
+        compare_prompts(
+            "질문",
+            settings(),
+            chat_caller=fake_chat,
+            system_prompt="반드시 JSON 객체만 반환한다.",
+        )
+
+        self.assertEqual(
+            calls[1][0][0],
+            {"role": "system", "content": "반드시 JSON 객체만 반환한다."},
+        )
+        with self.assertRaisesRegex(ValueError, "system prompt"):
+            compare_prompts("질문", settings(), chat_caller=fake_chat, system_prompt="   ")
+        self.assertEqual(len(calls), 2)
 
     def test_run_chat_builds_history_in_core_and_returns_json_friendly_result(self):
         calls: list[tuple[list[dict[str, str]], str | None]] = []
@@ -198,49 +227,140 @@ class LabCoreTests(unittest.TestCase):
                 ["one", "two"], settings(), embedder=lambda *_: np.asarray([[1, 0]])
             )
 
-    def test_label_image_assigns_closest_candidate_label(self):
-        image_calls: list[tuple[list[str], str | None]] = []
-        text_calls: list[tuple[list[str], str | None]] = []
+    def test_append_embedding_cluster_point_embeds_only_new_text_and_reuses_state(self):
+        calls: list[tuple[list[str], str | None]] = []
+        vectors = {
+            "apple": [1, 0, 0],
+            "orange": [0.9, 0.1, 0],
+            "phone": [0, 1, 0],
+        }
 
-        def fake_image_embedder(paths, _settings, model):
-            image_calls.append(([str(path) for path in paths], model))
-            return np.asarray([[1, 0]], dtype=float)
+        def fake_embedder(texts, _settings, model):
+            calls.append((list(texts), model))
+            return np.asarray([vectors[text] for text in texts], dtype=float)
 
-        def fake_text_embedder(labels, _settings, model):
-            text_calls.append((list(labels), model))
-            return np.asarray([[0.2, 0.8], [0.9, 0.1]], dtype=float)
-
-        outcome = label_image(
-            "invoice.png",
-            ["food", "document"],
-            settings(),
-            model="amazon--titan-embed-image",
-            image_embedder=fake_image_embedder,
-            text_embedder=fake_text_embedder,
+        first = append_embedding_cluster_point(
+            " apple ", None, settings(), model="embedding-test", embedder=fake_embedder
+        )
+        second = append_embedding_cluster_point(
+            "orange", first, settings(), model="embedding-test", embedder=fake_embedder
+        )
+        outcome = append_embedding_cluster_point(
+            "phone", second, settings(), model="embedding-test", embedder=fake_embedder
         )
 
         self.assertEqual(
-            image_calls,
-            [(["invoice.png"], "amazon--titan-embed-image")],
+            calls,
+            [
+                (["apple"], "embedding-test"),
+                (["orange"], "embedding-test"),
+                (["phone"], "embedding-test"),
+            ],
         )
-        self.assertEqual(
-            text_calls,
-            [(["food", "document"], "amazon--titan-embed-image")],
-        )
-        self.assertEqual(outcome["image_name"], "invoice.png")
-        self.assertEqual(outcome["embedding_dimensions"], 2)
-        self.assertEqual(outcome["predicted_label"], "document")
-        self.assertGreater(
-            outcome["label_scores"][0]["similarity"],
-            outcome["label_scores"][1]["similarity"],
-        )
+        self.assertEqual(outcome["model"], "embedding-test")
+        self.assertEqual(outcome["dimensions"], 3)
+        self.assertEqual(outcome["cluster_count"], 2)
+        self.assertEqual([item["text"] for item in outcome["entries"]], ["apple", "orange", "phone"])
+        self.assertEqual([item["index"] for item in outcome["entries"]], [1, 2, 3])
+        self.assertTrue(all(len(item["vector"]) == 3 for item in outcome["entries"]))
+        self.assertTrue(all(isinstance(item["x"], float) for item in outcome["entries"]))
         json.dumps(outcome)
 
-    def test_label_image_requires_candidate_labels(self):
-        with self.assertRaisesRegex(ValueError, "후보 라벨"):
-            label_image(
-                "one.png", [], settings(), image_embedder=lambda *_: self.fail("SDK should not be called")
+    def test_compare_and_append_embedding_clusters_reuses_one_comparison_batch(self):
+        calls: list[tuple[list[str], str | None]] = []
+
+        def fake_embedder(texts, _settings, model):
+            calls.append((list(texts), model))
+            return np.asarray([[1, 0], [0, 1]], dtype=float)
+
+        outcome = compare_and_append_embedding_clusters(
+            " apple ",
+            " orange ",
+            None,
+            settings(),
+            model="embedding-test",
+            embedder=fake_embedder,
+        )
+
+        self.assertEqual(calls, [(["apple", "orange"], "embedding-test")])
+        self.assertEqual(outcome["comparison"]["texts"], ["apple", "orange"])
+        self.assertAlmostEqual(
+            outcome["comparison"]["comparisons"][0]["cosine_similarity"], 0.0
+        )
+        self.assertEqual(
+            [item["text"] for item in outcome["cluster"]["entries"]],
+            ["apple", "orange"],
+        )
+        self.assertEqual(outcome["cluster"]["cluster_count"], 2)
+        json.dumps(outcome)
+
+    def test_compare_and_append_embedding_clusters_keeps_each_text_once(self):
+        calls: list[tuple[list[str], str | None]] = []
+
+        def fake_embedder(texts, _settings, model):
+            calls.append((list(texts), model))
+            return np.asarray([[1, 0], [0, 1]], dtype=float)
+
+        first = compare_and_append_embedding_clusters(
+            "apple", "orange", None, settings(), model="embedding-test", embedder=fake_embedder
+        )
+        repeated = compare_and_append_embedding_clusters(
+            "orange", "apple", first["cluster"], settings(), model="embedding-test", embedder=fake_embedder
+        )
+
+        self.assertEqual(calls, [(["apple", "orange"], "embedding-test"), (["orange", "apple"], "embedding-test")])
+        self.assertEqual(repeated["added_texts"], [])
+        self.assertEqual([entry["text"] for entry in repeated["cluster"]["entries"]], ["apple", "orange"])
+
+    def test_append_embedding_cluster_point_validates_state_before_sdk_call(self):
+        no_call = lambda *_: self.fail("SDK should not be called")
+        with self.assertRaisesRegex(ValueError, "키워드"):
+            append_embedding_cluster_point(" ", None, settings(), embedder=no_call)
+        with self.assertRaisesRegex(ValueError, "상태 형식"):
+            append_embedding_cluster_point("new", [], settings(), embedder=no_call)
+        with self.assertRaisesRegex(ValueError, "모델이 변경"):
+            append_embedding_cluster_point(
+                "new",
+                {"model": "old-model", "dimensions": 2, "entries": [{"text": "old", "vector": [1, 0]}]},
+                settings(),
+                model="new-model",
+                embedder=no_call,
             )
+
+    def test_append_embedding_cluster_point_rejects_dimension_change_without_mutating_state(self):
+        original = {
+            "model": "embedding-test",
+            "dimensions": 2,
+            "entries": [{"index": 1, "text": "old", "vector": [1.0, 0.0], "cluster": 0, "x": 0.0, "y": 0.0}],
+        }
+        before = json.loads(json.dumps(original))
+        with self.assertRaisesRegex(ValueError, "차원이 변경"):
+            append_embedding_cluster_point(
+                "new",
+                original,
+                settings(),
+                model="embedding-test",
+                embedder=lambda *_: np.asarray([[1, 0, 0]], dtype=float),
+            )
+        self.assertEqual(original, before)
+
+    def test_append_embedding_cluster_point_uses_one_cluster_then_caps_at_five(self):
+        state = None
+        for index in range(25):
+            state = append_embedding_cluster_point(
+                f"item-{index}",
+                state,
+                settings(),
+                model="embedding-test",
+                embedder=lambda texts, *_: np.asarray(
+                    [[float(index), 1.0, float(index % 3)] for _ in texts]
+                ),
+            )
+            if index == 0:
+                self.assertEqual(state["cluster_count"], 1)
+                self.assertEqual(state["entries"][0]["cluster"], 0)
+        self.assertEqual(state["cluster_count"], 5)
+        self.assertEqual(len(state["entries"]), 25)
 
     def test_retrieve_similar_texts_ranks_query_documents_in_one_batch(self):
         calls: list[tuple[list[str], str | None]] = []

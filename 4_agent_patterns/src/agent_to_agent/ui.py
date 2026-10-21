@@ -5,7 +5,9 @@ from __future__ import annotations
 import html
 import json
 import os
+from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import gradio as gr
 from lab_common.config import Settings, load_settings
@@ -21,6 +23,18 @@ from .history import persist_a2a_conversation, persist_human_approval_action
 from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
 from .tools import schemas_for_tool_ids
+
+_AVATAR_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets" / "brand"
+
+
+def _brand_avatar_html(filename: str, label: str, icon: str) -> str:
+    """Return a locally served, user-supplied brand image for a chat avatar."""
+    asset_path = quote((_AVATAR_ASSET_DIR / filename).as_posix(), safe="/")
+    return (
+        '<img class="a2a-group-chat__brand-avatar" '
+        f'src="/gradio_api/file={asset_path}" alt="{label}" '
+        f'data-avatar-icon="{icon}">'
+    )
 
 A2A_WORKFLOW_GRAPH_SVG = """
 <svg viewBox="0 0 1800 410" width="100%" role="img" aria-label="LLM-orchestrated A2A handoff workflow" xmlns="http://www.w3.org/2000/svg">
@@ -74,6 +88,18 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
     });
     modal.addEventListener("click", (event) => {
       if (event.target === modal) modal.close();
+    });
+  }
+  const toolbar = document.getElementById("a2a-page-toolbar");
+  if (toolbar && !toolbar.dataset.toolbarBound) {
+    toolbar.dataset.toolbarBound = "true";
+    toolbar.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-a2a-chat-toolbar-action]");
+      if (!action || !toolbar.contains(action)) return;
+      const selector = action.dataset.a2aChatToolbarAction === "reset"
+        ? "#a2a-chat-reset-action button, button#a2a-chat-reset-action"
+        : "#a2a-chat-pause-action button, button#a2a-chat-pause-action";
+      document.querySelector(selector)?.click();
     });
   }
   if (!root || !payloadRoot || root.dataset.chatBound) return;
@@ -1189,21 +1215,8 @@ _MESSAGE_AVATAR_ICONS = {
         '<path d="M4 21V5.5A2.5 2.5 0 0 1 6.5 3h7A2.5 2.5 0 0 1 16 5.5V21M2 21h20M8 7h1M12 7h1M8 11h1M12 11h1M9 21v-5h2v5"/>'
         "</svg>"
     ),
-    "orchestrator": (
-        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
-        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
-        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
-        '<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/>'
-        '<circle cx="12" cy="18" r="2"/><path d="m7.7 7.2 3.1 8.1M16.3 7.2l-3.1 8.1M8 6h8"/>'
-        "</svg>"
-    ),
-    "agent": (
-        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
-        'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
-        'stroke-linejoin="round" aria-hidden="true" focusable="false">'
-        '<rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M8 13h.01M16 13h.01M9 16h6"/>'
-        "</svg>"
-    ),
+    "orchestrator": _brand_avatar_html("sap_logo.png", "SAP", "sap"),
+    "agent": _brand_avatar_html("joule.png", "Joule", "joule"),
     "human": (
         '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" '
         'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
@@ -1310,7 +1323,28 @@ def _scenario_card_html(title: str, department: str, request: str) -> str:
     )
 
 
+def _conversation_history_for_handoff(
+    messages: list[dict[str, Any]] | None,
+) -> list[dict[str, str]]:
+    """Return semantic user/assistant turns, excluding internal A2A event bubbles."""
+    history: list[dict[str, str]] = []
+    for message in messages or []:
+        if not isinstance(message, dict) or message.get("kind") != "field":
+            continue
+        text = message.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        history.append(
+            {
+                "role": "assistant" if message.get("heading") else "user",
+                "content": text.strip(),
+            }
+        )
+    return history
+
+
 def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
+    gr.set_static_paths(_AVATAR_ASSET_DIR)
     settings = settings or load_settings()
     default_outlook_recipient = _default_outlook_recipient()
 
@@ -1325,6 +1359,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         if not clean_request:
             raise gr.Error("요청을 입력하세요.")
         requester_label = _requester_label(request_department)
+        conversation_history = _conversation_history_for_handoff(previous_messages)
         labels = {agent["agent_id"]: agent["agent_label"] for agent in list_agents()}
         event_log, middleware = [], []
         chat_messages = list(previous_messages or [])
@@ -1344,7 +1379,11 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             )
 
         try:
-            for event in run_handoff_stream(clean_request, settings=settings):
+            for event in run_handoff_stream(
+                clean_request,
+                settings=settings,
+                conversation_history=conversation_history,
+            ):
                 kind = event["type"]
                 if kind == "field_handoff_received":
                     event_log.append({"event": "field_handoff_received"})
@@ -1541,6 +1580,14 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             normalized,
         )
 
+    def reset_chat():
+        """Clear only this browser session's conversation and pending approval."""
+        return _chat_payload_html([]), [], [], None
+
+    def pause_chat():
+        """Cancel the active streamed handoff while keeping messages on screen."""
+        return None
+
     def send_approved_email(
         drafts: list[dict[str, Any]] | None,
         messages: list[dict[str, Any]] | None,
@@ -1667,14 +1714,14 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     .a2a-chat-payload{display:none!important}.a2a-chat-shell{border-color:#c4d0dc;background:#edf2f6}.a2a-chat-composer{background:#f7f9fb!important;border-top-color:#c4d0dc!important}.a2a-group-chat{border-color:#c4d0dc;background:#edf2f6}.a2a-group-chat__header{background:#5d7489}.a2a-group-chat__messages{box-sizing:border-box;width:100%;max-width:980px;margin:0 auto;padding:16px 18px}.a2a-group-chat__row{margin-bottom:16px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 42px))}.a2a-group-chat__avatar{box-shadow:0 1px 2px rgba(40,58,74,.15)}.a2a-group-chat__sender{margin-bottom:5px;font-size:12px}.a2a-group-chat__bubble{box-sizing:border-box;max-width:100%;padding:12px;border:1px solid #d7e0e8;border-radius:4px 13px 13px 13px;color:#25313d;line-height:1.55;box-shadow:0 1px 2px rgba(40,58,74,.08)}.a2a-group-chat__title{margin:0 0 9px;color:#41576b;font-size:11px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__section{margin:8px 0 0;padding:8px 9px;border-radius:8px;background:#f5f8fb}.a2a-group-chat__section:first-of-type{margin-top:0}.a2a-group-chat__section-label{margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__section-body p{margin:0}.a2a-group-chat__section-body ul{margin:0;padding-left:17px}.a2a-group-chat__section-body li+li{margin-top:3px}.a2a-group-chat__subagent-card{padding:10px;border:1px solid #d8e3eb;border-radius:9px;background:#f7fafc}.a2a-group-chat__subagent-result>span,.a2a-group-chat__subagent-next>span,.a2a-group-chat__subagent-meta-label{display:block;margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__subagent-result p,.a2a-group-chat__subagent-next p{margin:0}.a2a-group-chat__subagent-result ul,.a2a-group-chat__subagent-next ul{margin:0;padding-left:17px}.a2a-group-chat__subagent-next{margin-top:9px;padding-top:9px;border-top:1px solid #e0e8ef}.a2a-group-chat__subagent-meta{display:flex;flex-wrap:wrap;gap:7px 10px;align-items:center;margin-top:10px;padding-top:9px;border-top:1px solid #e0e8ef}.a2a-group-chat__subagent-tools{display:flex;flex-wrap:wrap;gap:5px;align-items:center}.a2a-group-chat__subagent-tools .a2a-group-chat__subagent-meta-label{margin:0}.a2a-group-chat__tool-chips{display:flex;flex-wrap:wrap;gap:4px}.a2a-group-chat__tool-chip{padding:2px 6px;border:1px solid #cbdce9;border-radius:999px;background:#fff;color:#46657d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;line-height:1.35;overflow-wrap:anywhere}.a2a-group-chat__evidence-tooltip{position:relative;display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border:1px solid #cbdce9;border-radius:999px;background:#fff;color:#46657d;font-size:10px;font-weight:800;line-height:1.35;cursor:help;outline:none}.a2a-group-chat__evidence-tooltip:focus-visible{box-shadow:0 0 0 2px #8db5d8}.a2a-group-chat__evidence-tooltip::after{position:absolute;z-index:4;bottom:calc(100% + 7px);left:0;display:block;width:max-content;max-width:min(360px,calc(100vw - 84px));padding:8px 9px;border-radius:8px;background:#314b64;color:#fff;content:attr(data-tooltip);font-size:11px;font-weight:400;line-height:1.45;white-space:pre-wrap;visibility:hidden;opacity:0;pointer-events:none;box-shadow:0 4px 14px rgba(40,58,74,.22);transition:opacity .12s ease}.a2a-group-chat__evidence-tooltip:hover::after,.a2a-group-chat__evidence-tooltip:focus::after{visibility:visible;opacity:1}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{background:#f4df72;color:#604f00}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-color:#e8d277;background:#fff8d8}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:rgba(255,255,255,.6)}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-color:#c6dff5;background:#f7fbff}.a2a-group-chat__system{background:#6f8395}#a2a-scenario-card-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px!important;align-items:stretch}#a2a-scenario-card-grid>.gr-column{min-width:0!important;flex:initial!important}.a2a-scenario-card{gap:0!important;min-width:0!important;border:1px solid #c9d9e7;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(40,58,74,.08);overflow:hidden}.a2a-scenario-card__body{height:100%;min-height:214px;padding:15px 15px 11px;background:linear-gradient(145deg,#f9fcff,#eef5fb);color:#25313d}.a2a-scenario-card__eyebrow{margin-bottom:5px;color:#5b7b99;font-size:10px;font-weight:800;letter-spacing:.08em}.a2a-scenario-card__body h4{margin:0 0 13px;color:#274761;font-size:15px;line-height:1.35}.a2a-scenario-card__department{display:flex;align-items:center;gap:7px;margin-bottom:12px}.a2a-scenario-card__department span,.a2a-scenario-card__request>span{color:#71869b;font-size:10px;font-weight:800;letter-spacing:.04em}.a2a-scenario-card__department strong{display:inline-block;padding:4px 7px;border-radius:999px;background:#dcebf7;color:#365d7c;font-size:11px;line-height:1.25}.a2a-scenario-card__request{padding:10px;border-radius:8px;background:rgba(255,255,255,.8);border:1px solid #e1e9f0}.a2a-scenario-card__request p{margin:5px 0 0;color:#425d73;font-size:12px;line-height:1.55;word-break:keep-all}.a2a-scenario-card button{width:calc(100% - 24px)!important;min-height:34px;margin:0 12px 12px!important;border:1px solid #769bbc!important;border-radius:8px!important;background:#fff!important;color:#315a7b!important;font-size:12px!important;font-weight:800!important}.a2a-scenario-card button:hover{border-color:#3f78a5!important;background:#edf6ff!important;color:#1d4f78!important}@media(max-width:900px){#a2a-scenario-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:700px){.a2a-group-chat__messages{padding:14px 10px}.a2a-group-chat__row>div:last-child{max-width:calc(100% - 42px)}.a2a-group-chat__evidence-tooltip::after{left:auto;right:0;max-width:calc(100vw - 64px)}#a2a-scenario-card-grid{grid-template-columns:1fr}.a2a-scenario-card__body{min-height:0}}
     """
     css += """
-    /* KakaoTalk-inspired group-chat treatment: familiar hierarchy without changing chat data. */
+    /* Legacy group-chat treatment; the SAP Joule rules below take final precedence. */
     .a2a-chat-shell{border:0!important;border-radius:16px!important;background:#b2c7d9!important;box-shadow:0 5px 18px rgba(57,78,97,.13)}
     .a2a-group-chat{background:#b2c7d9!important;border:0!important;border-radius:16px 16px 0 0!important}
     .a2a-group-chat__header{min-height:56px;padding:9px 15px!important;background:#fee500!important;color:#1f1f1f!important;box-shadow:inset 0 -1px rgba(0,0,0,.09)}
     .a2a-group-chat__room-title{display:flex;gap:9px;align-items:center}.a2a-group-chat__room-avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:12px;background:#3c1e1e;color:#fee500;font-size:14px;font-weight:900}.a2a-group-chat__room-title b{display:block;font-size:14px;line-height:1.2}.a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar){display:block;margin-top:2px;color:#665e20;font-size:10px;line-height:1.2}.a2a-group-chat__room-status{align-self:center;color:#665e20;font-size:11px;font-weight:700}.a2a-group-chat__room-status::before{display:inline-block;width:6px;height:6px;margin:0 4px 1px 0;border-radius:50%;background:#48a868;content:""}
-    .a2a-group-chat__messages{max-width:980px;padding:18px!important;background:#b2c7d9}.a2a-group-chat__row{gap:9px;margin-bottom:15px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}.a2a-group-chat__avatar{width:35px;height:35px;border:1px solid rgba(55,76,93,.16);background:#f7f7f7!important;color:#435867!important;font-size:12px;box-shadow:0 1px 2px rgba(58,75,91,.16)!important}.a2a-group-chat__sender{margin:1px 0 4px!important;color:#324755!important;font-size:11px!important;font-weight:800}.a2a-group-chat__bubble{position:relative;padding:10px 12px!important;border:0!important;border-radius:3px 13px 13px 13px!important;background:#fff!important;color:#202124!important;line-height:1.6!important;box-shadow:0 1px 1px rgba(50,67,82,.13)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before{position:absolute;top:9px;left:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,100% 100%)}
+    .a2a-group-chat__messages{max-width:980px;padding:18px!important;background:#b2c7d9}.a2a-group-chat__row{gap:9px;margin-bottom:15px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}.a2a-group-chat__avatar{width:35px;height:35px;border:1px solid rgba(55,76,93,.16);background:#f7f7f7!important;color:#435867!important;font-size:12px;box-shadow:0 1px 2px rgba(58,75,91,.16)!important;overflow:hidden!important}.a2a-group-chat__sender{margin:1px 0 4px!important;color:#324755!important;font-size:11px!important;font-weight:800}.a2a-group-chat__bubble{position:relative;padding:10px 12px!important;border:0!important;border-radius:3px 13px 13px 13px!important;background:#fff!important;color:#202124!important;line-height:1.6!important;box-shadow:0 1px 1px rgba(50,67,82,.13)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before{position:absolute;top:9px;left:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,100% 100%)}
     .a2a-group-chat__row--field{justify-content:flex-end}.a2a-group-chat__row--field .a2a-group-chat__avatar{order:2;border-color:rgba(91,77,0,.16);background:#fff3a7!important;color:#665300!important}.a2a-group-chat__row--field>div:last-child{display:flex;flex-direction:column;align-items:flex-end}.a2a-group-chat__row--field .a2a-group-chat__sender{text-align:right}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-radius:13px 3px 13px 13px!important;background:#fee500!important}.a2a-group-chat__row--field .a2a-group-chat__bubble::after{position:absolute;top:9px;right:-5px;width:10px;height:10px;background:inherit;content:"";clip-path:polygon(0 0,100% 0,0 100%)}
-    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;background:#665b93!important;color:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-radius:3px 13px 13px 13px!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f5f3fb!important}.a2a-group-chat__row--field .a2a-group-chat__section{background:rgba(255,255,255,.52)!important}
+    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;border-color:rgba(10,110,209,.28);background:#fff!important;color:inherit!important}.a2a-group-chat__brand-avatar{display:block;width:76%;height:76%;max-width:76%;max-height:76%;border-radius:50%;object-fit:contain;flex:none}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-radius:3px 13px 13px 13px!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f5f3fb!important}.a2a-group-chat__row--field .a2a-group-chat__section{background:rgba(255,255,255,.52)!important}
     .a2a-group-chat__title{margin-bottom:7px!important;color:#655b90!important}.a2a-group-chat__section{margin-top:6px!important;padding:7px 8px!important;border-radius:8px!important;background:#f3f6f8!important}.a2a-group-chat__section-label{color:#617586!important}.a2a-group-chat__subagent-card{border:0!important;border-radius:9px!important;background:#f3f6f8!important;box-shadow:inset 0 0 0 1px rgba(101,121,136,.12)}.a2a-group-chat__subagent-next,.a2a-group-chat__subagent-meta{border-top-color:#dbe3e9!important}.a2a-group-chat__tool-chip,.a2a-group-chat__evidence-tooltip{border-color:#d4dde4!important;background:#fff!important;color:#536a7b!important}.a2a-group-chat__system{margin:6px auto 14px!important;padding:5px 10px!important;background:rgba(71,93,111,.50)!important;color:#fff!important;font-size:10px!important;box-shadow:0 1px 1px rgba(50,67,82,.1)}
     .a2a-group-chat__team-card{padding:10px;border:0;border-radius:9px;background:#f3f6f8;box-shadow:inset 0 0 0 1px rgba(101,121,136,.12)}.a2a-group-chat__team-summary>span,.a2a-group-chat__team-next>span{display:block;margin-bottom:4px;color:#587086;font-size:10px;font-weight:800;letter-spacing:.02em}.a2a-group-chat__team-summary p,.a2a-group-chat__team-next p{margin:0}.a2a-group-chat__team-summary ul,.a2a-group-chat__team-next ul{margin:0;padding-left:17px}.a2a-group-chat__team-next{margin-top:9px;padding-top:9px;border-top:1px solid #dbe3e9}.a2a-group-chat__team-meta{display:flex;justify-content:flex-end;margin-top:10px;padding-top:9px;border-top:1px solid #dbe3e9}
     .a2a-chat-shell,.a2a-group-chat{overflow-x:hidden!important}.a2a-group-chat__messages{overflow-x:hidden!important;overflow-y:auto!important}.a2a-group-chat__row,.a2a-group-chat__row>div:last-child,.a2a-group-chat__bubble{min-width:0}.a2a-group-chat__bubble,.a2a-group-chat__section-body,.a2a-group-chat__subagent-card,.a2a-group-chat__team-card{overflow-wrap:anywhere;word-break:break-word}
@@ -1688,7 +1735,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     #a2a-agent-cards-modal{height:min(760px,82vh)}.a2a-topology{display:flex;max-height:none;height:100%;overflow:hidden;flex-direction:column}.a2a-topology__layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.a2a-topology__sidebar{display:flex;gap:6px;min-height:0;padding:12px;border-right:1px solid #d9e4ee;background:#f3f7fa;overflow-y:auto;flex-direction:column}.a2a-topology__team-select{width:100%;padding:10px;border:1px solid transparent;border-radius:9px;background:transparent;color:#4d657d;text-align:left;cursor:pointer}.a2a-topology__team-select:hover{background:#e9f1f8}.a2a-topology__team-select[aria-selected="true"]{border-color:#9abbd8;background:#fff;color:#284b69;box-shadow:0 1px 2px rgba(40,72,100,.08)}.a2a-topology__team-select b{display:block;font-size:12px}.a2a-topology__team-select span{display:-webkit-box;margin-top:4px;color:#6a8297;font-size:10px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.a2a-topology__detail{min-height:0;padding:16px;overflow-y:auto}.a2a-topology__team-panel{border:1px solid #d6e1eb;border-radius:12px;background:#fff;overflow:hidden}.a2a-topology__team-panel>p{margin:0;padding:10px 14px;color:#4d657d;font-size:12px;line-height:1.5}.a2a-topology__subagent-heading{padding:10px 14px;border-top:1px solid #e2eaf1;border-bottom:1px solid #e2eaf1;background:#f8fbfd;color:#587086;font-size:11px;font-weight:800}.a2a-topology__subagents{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px;margin:0;padding:14px;list-style:none}.a2a-topology__subagent::before{display:none}.a2a-topology__subagent{min-width:0}.a2a-topology__tools{margin-top:7px}@media(max-width:700px){#a2a-agent-cards-modal{height:min(760px,calc(100vh - 16px))}.a2a-topology__layout{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr)}.a2a-topology__sidebar{display:flex;max-height:116px;border-right:0;border-bottom:1px solid #d9e4ee;overflow-x:auto;overflow-y:hidden;flex-direction:row}.a2a-topology__team-select{min-width:160px}.a2a-topology__detail{padding:10px}.a2a-topology__subagents{grid-template-columns:1fr;padding:10px}}
     """
     css += """
-    #a2a-page-toolbar{justify-content:flex-end!important;align-items:center!important;min-height:0!important;margin:0 0 8px!important;gap:0!important}#a2a-page-toolbar>.gr-column{flex:0 0 auto!important;min-width:0!important}#a2a-agent-cards-open{width:auto!important;min-width:0!important;min-height:29px!important;padding:5px 10px!important;border:1px solid #c8d6e2!important;border-radius:8px!important;background:#fff!important;color:#425f79!important;font-size:11px!important;font-weight:800!important;box-shadow:0 1px 2px rgba(40,58,74,.08)!important}#a2a-agent-cards-open:hover{border-color:#789ab7!important;background:#f3f8fc!important;color:#274e70!important}
+    #a2a-page-toolbar{justify-content:flex-end!important;align-items:center!important;min-height:0!important;margin:0 0 8px!important;gap:6px!important}#a2a-page-toolbar>.gr-column{flex:0 0 auto!important;min-width:0!important}#a2a-agent-cards-open,#a2a-chat-reset,#a2a-chat-pause{width:auto!important;min-width:0!important;min-height:29px!important;padding:5px 10px!important;border:1px solid #c8d6e2!important;border-radius:8px!important;background:#fff!important;color:#425f79!important;font-size:11px!important;font-weight:800!important;box-shadow:0 1px 2px rgba(40,58,74,.08)!important}#a2a-agent-cards-open:hover,#a2a-chat-reset:hover{border-color:#789ab7!important;background:#f3f8fc!important;color:#274e70!important}#a2a-chat-pause{border-color:#d5bd80!important;color:#765c15!important}#a2a-chat-pause:hover{border-color:#b7974b!important;background:#fff9e8!important;color:#624b0d!important}
     """
     css += """
     .a2a-group-chat__approval-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.a2a-group-chat__approval-button{padding:6px 9px;border:0;border-radius:7px;font-size:11px;font-weight:800;line-height:1.3;cursor:pointer}.a2a-group-chat__approval-button--send{background:#fee500;color:#3c3100}.a2a-group-chat__approval-button--send:hover{background:#f4da00}.a2a-group-chat__approval-button--cancel{background:#edf1f5;color:#516373}.a2a-group-chat__approval-button--cancel:hover{background:#dfe7ed}.a2a-group-chat__approval-button:disabled{opacity:.7;cursor:default}.a2a-group-chat__system:has(.a2a-group-chat__hitl-fallback-button){display:flex;align-items:center;gap:8px;max-width:min(92%,680px);border-radius:11px;text-align:left;line-height:1.45}.a2a-group-chat__hitl-fallback-button{flex:none;padding:6px 9px;border:0;border-radius:7px;background:#fee500;color:#3c3100;font-size:11px;font-weight:800;line-height:1.3;cursor:pointer}.a2a-group-chat__hitl-fallback-button:hover{background:#f4da00}.a2a-group-chat__hitl-fallback-button:disabled{opacity:.7;cursor:default}.a2a-hidden-hitl-action,.a2a-hidden-chat-action{display:none!important}@media(max-width:700px){.a2a-group-chat__approval-actions{align-items:stretch;flex-direction:column}.a2a-group-chat__approval-button{width:100%}.a2a-group-chat__system:has(.a2a-group-chat__hitl-fallback-button){display:block}.a2a-group-chat__hitl-fallback-button{display:block;width:100%;margin-top:7px}}
@@ -1696,15 +1743,33 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     css += """
     .a2a-group-chat__profitability{margin-top:10px;padding-top:10px;border-top:1px solid #dbe3e9}.a2a-group-chat__profitability-heading{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px;color:#405e75;font-size:11px}.a2a-group-chat__profitability-heading b{font-size:12px}.a2a-group-chat__profitability-heading span{color:#718699;font-size:10px}.a2a-group-chat__financial-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid #d9e4ec;border-radius:8px;background:#fff;color:#394b5a;font-size:9px;line-height:1.35}.a2a-group-chat__financial-table th,.a2a-group-chat__financial-table td{padding:5px 4px;border-right:1px solid #e5edf2;border-bottom:1px solid #e5edf2;vertical-align:top;overflow-wrap:anywhere;word-break:break-word}.a2a-group-chat__financial-table th:last-child,.a2a-group-chat__financial-table td:last-child{border-right:0}.a2a-group-chat__financial-table tbody tr:last-child th,.a2a-group-chat__financial-table tbody tr:last-child td{border-bottom:0}.a2a-group-chat__financial-table thead th{background:#eaf2f7;color:#506a80;font-size:8px;font-weight:800;text-align:left}.a2a-group-chat__financial-table tbody th{background:#f7fafc;color:#3e5e77;font-size:10px;text-align:left}.a2a-group-chat__profitability-detail{margin-top:8px}.a2a-group-chat__profitability-detail summary{color:#506a80;font-size:10px;font-weight:800;cursor:pointer}.a2a-group-chat__profitability-detail[open] summary{margin-bottom:7px}.a2a-group-chat__financial-table--monthly{font-size:8px}.a2a-group-chat__financial-table--monthly thead th{font-size:8px}.a2a-group-chat__profitability-boundary{margin:7px 0 0;color:#748795;font-size:9px;line-height:1.4}
     """
+    css += """
+    /* SAP Joule / Fiori conversation surface. */
+    .a2a-chat-shell{border:1px solid #d9d5e7!important;border-radius:16px!important;background:#fff!important;box-shadow:0 2px 10px rgba(58,42,91,.10)!important}
+    .a2a-group-chat{border:0!important;border-radius:16px 16px 0 0!important;background:#fff!important}
+    .a2a-group-chat__header{min-height:58px;padding:10px 16px!important;background:linear-gradient(105deg,#0a6ed1 0%,#4f36b7 56%,#805ad5 100%)!important;color:#fff!important;box-shadow:none!important}
+    .a2a-group-chat__room-avatar{width:32px;height:32px;border-radius:10px;background:rgba(255,255,255,.18)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.26)}
+    .a2a-group-chat__room-title b{color:#fff!important}.a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar),.a2a-group-chat__room-status{color:rgba(255,255,255,.84)!important}.a2a-group-chat__room-status::before{background:#7ee2b8!important}
+    .a2a-group-chat__messages{box-sizing:border-box!important;width:100%!important;max-width:none!important;margin:0!important;padding:18px!important;background:#f7f6fb!important}.a2a-group-chat__row{gap:10px;margin-bottom:16px}.a2a-group-chat__row>div:last-child{max-width:min(720px,calc(100% - 46px))}
+    .a2a-group-chat__avatar{width:35px;height:35px;border:1px solid #ddd8e9!important;background:#fff!important;color:#536273!important;box-shadow:0 1px 3px rgba(56,43,88,.12)!important;overflow:hidden!important}.a2a-group-chat__sender{margin:1px 0 5px!important;color:#3a4655!important;font-size:11px!important;font-weight:800}
+    .a2a-group-chat__bubble{padding:11px 13px!important;border:1px solid #e0ddea!important;border-radius:12px!important;background:#fff!important;color:#25313d!important;line-height:1.6!important;box-shadow:0 1px 2px rgba(55,41,85,.06)!important}.a2a-group-chat__row--agent .a2a-group-chat__bubble::before,.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble::before,.a2a-group-chat__row--field .a2a-group-chat__bubble::after{display:none!important}
+    .a2a-group-chat__row--orchestrator{justify-content:flex-start}.a2a-group-chat__row--orchestrator .a2a-group-chat__avatar{order:initial;border-color:#cfc3ed!important;background:#fff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__bubble{border-color:#d6c9f3!important;background:#f8f5ff!important}.a2a-group-chat__row--orchestrator .a2a-group-chat__section{background:#f0eaff!important}
+    .a2a-group-chat__row--field{justify-content:flex-end}.a2a-group-chat__row--field .a2a-group-chat__avatar{order:2;border-color:#cbbcf0!important;background:#f4efff!important;color:#6143a6!important}.a2a-group-chat__row--field .a2a-group-chat__bubble{border-color:#cbbcf0!important;border-radius:12px!important;background:linear-gradient(135deg,#f4efff,#ebe3ff)!important}.a2a-group-chat__row--field>div:last-child{align-items:flex-end}.a2a-group-chat__row--field .a2a-group-chat__sender{text-align:right}
+    .a2a-group-chat__title{color:#5336a6!important}.a2a-group-chat__section{margin-top:7px!important;border-radius:9px!important;background:#f5f4f8!important}.a2a-group-chat__section-label{color:#66558c!important}.a2a-group-chat__subagent-card,.a2a-group-chat__team-card{border:1px solid #e3deed!important;background:#fbfaff!important;box-shadow:none!important}.a2a-group-chat__tool-chip,.a2a-group-chat__evidence-tooltip{border-color:#d8d0e8!important;background:#fff!important;color:#5b4d7b!important}.a2a-group-chat__system{border:1px solid #dce1e8!important;border-radius:999px!important;background:#eef0f4!important;color:#526171!important;box-shadow:none!important}
+    .a2a-group-chat__new-message{background:#5d3ec1!important;color:#fff!important;box-shadow:0 2px 8px rgba(72,49,151,.24)!important}.a2a-group-chat__new-message:hover{background:#4c30aa!important}.a2a-chat-composer{padding:11px 12px 12px!important;border-top:1px solid #e2deeb!important;background:#fff!important}.a2a-chat-composer textarea{min-height:44px!important;border:1px solid #cfc8df!important;border-radius:10px!important;background:#fff!important;color:#243241!important;box-shadow:none!important}.a2a-chat-composer textarea:focus{border-color:#7452cc!important;box-shadow:0 0 0 2px rgba(116,82,204,.18)!important}
+    #a2a-page-toolbar-host{margin:0 0 8px!important;padding:0!important}#a2a-page-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:7px;flex-wrap:wrap;margin:0;padding:0}.a2a-chat-toolbar__button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-width:0;height:32px;padding:6px 10px;border:1px solid #d4cde3;border-radius:8px;background:#fff;color:#49377a;font:800 12px/1.2 inherit;white-space:nowrap;word-break:keep-all;box-shadow:none;cursor:pointer}.a2a-chat-toolbar__button:hover{border-color:#7a58cc;background:#f6f2ff;color:#432b94}.a2a-chat-toolbar__reset{min-width:82px}.a2a-chat-toolbar__pause{min-width:88px;border-color:#bca8e8;color:#5138a5}.a2a-chat-toolbar__agent{min-width:72px}
+    .a2a-group-chat__approval-button--send,.a2a-group-chat__hitl-fallback-button{background:#5d3ec1!important;color:#fff!important}.a2a-group-chat__approval-button--send:hover,.a2a-group-chat__hitl-fallback-button:hover{background:#4c30aa!important}.a2a-group-chat__approval-button--cancel{background:#eef0f4!important;color:#4f5e6d!important}.a2a-group-chat__approval-button--cancel:hover{background:#e1e5ea!important}
+    @media(max-width:700px){.a2a-group-chat__messages{padding:14px 10px!important}.a2a-group-chat__room-status{display:none}.a2a-group-chat__bubble{font-size:12px}.a2a-group-chat__row>div:last-child{max-width:calc(100% - 45px)}}
+    """
     with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
-        with gr.Row(elem_id="a2a-page-toolbar"):
-            gr.Button(
-                "Agent 정보",
-                elem_id="a2a-agent-cards-open",
-                size="sm",
-                scale=0,
-                min_width=0,
-            )
+        gr.HTML(
+            "<div id=\"a2a-page-toolbar\">"
+            "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__reset\" data-a2a-chat-toolbar-action=\"reset\">채팅 초기화</button>"
+            "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__pause\" data-a2a-chat-toolbar-action=\"pause\">⏸ 일시정지</button>"
+            "<button type=\"button\" id=\"a2a-agent-cards-open\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__agent\">Agent 정보</button>"
+            "</div>",
+            elem_id="a2a-page-toolbar-host",
+        )
         with gr.Row():
             with gr.Column(elem_classes=["a2a-chat-shell"]):
                 gr.HTML(
@@ -1726,6 +1791,16 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             "",
             elem_id="a2a-chat-payload",
             elem_classes=["a2a-chat-payload"],
+        )
+        reset_chat_button = gr.Button(
+            "채팅 초기화",
+            elem_id="a2a-chat-reset-action",
+            elem_classes=["a2a-hidden-chat-action"],
+        )
+        pause_chat_button = gr.Button(
+            "일시정지",
+            elem_id="a2a-chat-pause-action",
+            elem_classes=["a2a-hidden-chat-action"],
         )
         approval_state = gr.State([])
         send_email_button = gr.Button(
@@ -1781,7 +1856,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             outputs=requester_department,
             queue=False,
         )
-        request.submit(
+        workflow_event = request.submit(
             run_workflow,
             inputs=[
                 request,
@@ -1792,6 +1867,16 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
             ],
             outputs=workflow_outputs,
             queue=True,
+            scroll_to_output=False,
+        )
+        pause_chat_button.click(
+            pause_chat, cancels=[workflow_event], queue=False, scroll_to_output=False
+        )
+        reset_chat_button.click(
+            reset_chat,
+            outputs=workflow_outputs,
+            cancels=[workflow_event],
+            queue=False,
             scroll_to_output=False,
         )
         send_email_button.click(

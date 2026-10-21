@@ -1,10 +1,9 @@
-"""Core workflow for 04_business_embedding_cluster.ipynb."""
+"""Core workflow for 03_embedding_advanced.ipynb."""
 
 from __future__ import annotations
 
 import json
 import os
-from base64 import b64encode
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
@@ -44,8 +43,11 @@ def embed_texts(
         raise ValueError("texts must not be empty.")
     if any(not text.strip() for text in texts):
         raise ValueError("texts must not contain blank values.")
+    selected_model = _selected_embedding_model(model)
+    if selected_model.startswith("text-embedding-"):
+        return _embed_openai_texts(texts, settings, selected_model)
     return _embed_titan_inputs(
-        [{"inputText": text} for text in texts], settings, model
+        [{"inputText": text} for text in texts], settings, selected_model
     )
 
 
@@ -57,10 +59,30 @@ def _selected_embedding_model(model: str | None) -> str:
     )
 
 
+def _embed_openai_texts(
+    texts: Sequence[str], settings: Settings, model: str
+) -> np.ndarray:
+    """Embed text-only OpenAI models through the Gen AI Hub OpenAI proxy."""
+    apply_ai_core_environment(settings)
+    try:
+        from gen_ai_hub.proxy.native.openai import OpenAI
+    except ImportError as error:
+        raise RuntimeError(
+            "OpenAI embedding 모델에는 sap-ai-sdk-gen이 필요합니다. requirements.txt를 다시 설치하세요."
+        ) from error
+
+    response = OpenAI().embeddings.create(model=model, input=list(texts))
+    data = sorted(response.data, key=lambda item: int(getattr(item, "index", 0)))
+    vectors = [getattr(item, "embedding", None) for item in data]
+    if any(not isinstance(vector, list) for vector in vectors):
+        raise ValueError("OpenAI embedding 응답에 embedding vector가 없습니다.")
+    return _as_matrix(vectors)
+
+
 def _embed_titan_inputs(
     payloads: Sequence[dict[str, str]], settings: Settings, model: str | None = None
 ) -> np.ndarray:
-    """Call Amazon Titan Multimodal Embeddings once for every text or image input."""
+    """Call Amazon Titan Multimodal Embeddings once for every text input."""
     if not payloads:
         raise ValueError("embedding inputs must not be empty.")
     apply_ai_core_environment(settings)
@@ -85,61 +107,6 @@ def _embed_titan_inputs(
             raise ValueError("Titan embedding 응답에 embedding vector가 없습니다.")
         vectors.append(embedding)
     return _as_matrix(vectors)
-
-
-def embed_image_files(
-    image_paths: Sequence[Path | str], settings: Settings, model: str | None = None
-) -> np.ndarray:
-    """Embed local PNG/JPEG image files with Amazon Titan Multimodal Embeddings."""
-    if not image_paths:
-        raise ValueError("image_paths must not be empty.")
-    paths = [Path(path) for path in image_paths]
-    if any(not path.is_file() for path in paths):
-        raise ValueError("모든 이미지 경로는 읽을 수 있는 파일이어야 합니다.")
-    return _embed_titan_inputs(
-        [{"inputImage": b64encode(path.read_bytes()).decode("ascii")} for path in paths],
-        settings,
-        model,
-    )
-
-
-def label_image(
-    image_path: Path | str,
-    labels: Sequence[str],
-    settings: Settings,
-    model: str | None = None,
-    image_embedder: Callable[[Sequence[Path | str], Settings, str | None], np.ndarray] = embed_image_files,
-    text_embedder: Callable[[Sequence[str], Settings, str | None], np.ndarray] = embed_texts,
-) -> dict[str, object]:
-    """Assign one image the closest label in a supplied candidate-label set."""
-    cleaned_labels = [label.strip() for label in labels if isinstance(label, str) and label.strip()]
-    if not cleaned_labels:
-        raise ValueError("후보 라벨을 하나 이상 입력하세요.")
-    if len(set(cleaned_labels)) != len(cleaned_labels):
-        raise ValueError("후보 라벨은 중복될 수 없습니다.")
-    image_vector = _as_matrix(image_embedder([image_path], settings, model))
-    label_vectors = _as_matrix(text_embedder(cleaned_labels, settings, model))
-    if len(image_vector) != 1:
-        raise ValueError("이미지 embedding 결과는 하나의 vector여야 합니다.")
-    if image_vector.shape[1] != label_vectors.shape[1]:
-        raise ValueError("이미지와 라벨 embedding의 차원이 일치하지 않습니다.")
-    scores = l2_normalize(image_vector)[0] @ l2_normalize(label_vectors).T
-    ranked_scores = sorted(
-        (
-            {"label": label, "similarity": float(score)}
-            for label, score in zip(cleaned_labels, scores, strict=True)
-        ),
-        key=lambda item: item["similarity"],
-        reverse=True,
-    )
-    return {
-        "model": _selected_embedding_model(model),
-        "image_name": Path(image_path).name,
-        "embedding_dimensions": int(image_vector.shape[1]),
-        "predicted_label": ranked_scores[0]["label"],
-        "label_scores": ranked_scores,
-        "action": "이미지와 후보 라벨의 embedding 유사도만 조회했습니다. 이미지 파일을 외부에 저장하지 않았습니다.",
-    }
 
 
 def kmeans_cluster(

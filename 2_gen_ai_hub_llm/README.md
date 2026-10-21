@@ -28,8 +28,8 @@ LLM 호출을 Prompt·Embedding·Reranking·비즈니스 임베딩으로 확장�
 | --- | --- | --- |
 | [01_prompt_and_model.ipynb](notebooks/01_prompt_and_model.ipynb) | system prompt와 user prompt를 바꾸며 응답을 비교합니다. | 지시 조건이 응답 형식·톤·근거 제시에 미치는 영향을 설명합니다. |
 | [02_embeddings.ipynb](notebooks/02_embeddings.ipynb) | 텍스트를 벡터로 변환하고 cosine similarity를 계산합니다. | 유사도 수치와 문장 의미가 항상 일치하지 않을 수 있음을 확인합니다. |
-| [03_reranker_decision_model.ipynb](notebooks/03_reranker_decision_model.ipynb) | 정책 후보를 다시 정렬하고 score·margin을 비교합니다. | 낮은 신뢰도 또는 작은 margin을 `manual-review`로 처리하는 기준을 이해합니다. |
-| [04_business_embedding_cluster.ipynb](notebooks/04_business_embedding_cluster.ipynb) | 비즈니스 문의를 군집화하고 label-aware adapter를 적용합니다. | 라벨별 재가중이 도메인 분류 관점에 주는 영향을 확인합니다. |
+| [03_embedding_advanced.ipynb](notebooks/03_embedding_advanced.ipynb) | 비즈니스 문의를 군집화하고 label-aware adapter를 적용합니다. | 라벨별 재가중이 도메인 분류 관점에 주는 영향을 확인합니다. |
+| [04_reranker_decision_model.ipynb](notebooks/04_reranker_decision_model.ipynb) | 정책 후보를 다시 정렬하고 score·margin을 비교합니다. | 낮은 신뢰도 또는 작은 margin을 `manual-review`로 처리하는 기준을 이해합니다. |
 
 각 노트북은 이전 결과를 전제로 하지 않지만, Prompt부터 Embedding, Reranking, 도메인 적용 순으로 보면 결과를 비교하기 쉽습니다.
 

@@ -45,6 +45,36 @@ from .transport import (
 )
 
 
+MAX_CONVERSATION_MESSAGES = 6
+MAX_CONVERSATION_CHARS = 6_000
+
+
+def _normalize_conversation_history(
+    conversation_history: list[dict[str, Any]] | None,
+) -> list[dict[str, str]]:
+    """Keep a bounded, role-labelled transcript for one browser chat session."""
+    normalized: list[dict[str, str]] = []
+    for item in conversation_history or []:
+        if not isinstance(item, dict):
+            continue
+        role, content = item.get("role"), item.get("content")
+        if role not in {"user", "assistant"} or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if content:
+            normalized.append({"role": role, "content": content})
+    normalized = normalized[-MAX_CONVERSATION_MESSAGES:]
+    total, bounded = 0, []
+    for item in reversed(normalized):
+        remaining = MAX_CONVERSATION_CHARS - total
+        if remaining <= 0:
+            break
+        content = item["content"][-remaining:]
+        bounded.append({**item, "content": content})
+        total += len(content)
+    return list(reversed(bounded))
+
+
 def list_agents() -> list[dict[str, Any]]:
     """Return the public F&B Agent Card descriptions."""
     return [
@@ -310,6 +340,7 @@ def _orchestration_observation(
     artifacts: list[dict[str, Any]],
     cards: dict[str, AgentCard],
     grounding: dict[str, Any],
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Generate the public Observe phase before the next orchestration action."""
     available = [
@@ -322,6 +353,9 @@ def _orchestration_observation(
         grounding=json.dumps(grounding, ensure_ascii=False),
         available=json.dumps(available, ensure_ascii=False),
         artifacts=json.dumps(artifacts, ensure_ascii=False),
+        conversation_history=json.dumps(
+            _normalize_conversation_history(conversation_history), ensure_ascii=False
+        ),
     )
     messages = [
         {
@@ -342,6 +376,7 @@ def _orchestrator_turn(
     on_grounding: Callable[[dict[str, Any]], None] | None = None,
     on_human_approval: Callable[[dict[str, Any]], None] | None = None,
     observation: dict[str, list[str]] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Let the model optionally search manuals before one orchestration decision."""
     available = [
@@ -356,6 +391,9 @@ def _orchestrator_turn(
         grounding=json.dumps(grounding_context, ensure_ascii=False),
         request=request,
         artifacts=json.dumps(artifacts, ensure_ascii=False),
+        conversation_history=json.dumps(
+            _normalize_conversation_history(conversation_history), ensure_ascii=False
+        ),
     )
     messages: list[dict[str, Any]] = [
         {
@@ -485,6 +523,7 @@ async def _run_async(
     settings: Settings,
     urls: dict[str, str],
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     context_id, cards = str(uuid4()), await discover_cards(urls)
     artifacts: list[dict[str, Any]] = []
@@ -494,6 +533,7 @@ async def _run_async(
     human_approvals: list[dict[str, Any]] = []
     termination: dict[str, Any] | None = None
     grounding = no_grounding_requested()
+    history = _normalize_conversation_history(conversation_history)
     loop = asyncio.get_running_loop()
 
     def emit_grounding_event(event: dict[str, Any]) -> None:
@@ -537,6 +577,7 @@ async def _run_async(
             artifacts,
             cards,
             grounding,
+            history,
         )
         observation_record = {"step": step + 1, "observation": observation}
         observations.append(observation_record)
@@ -570,6 +611,7 @@ async def _run_async(
             emit_grounding_event,
             emit_human_approval_event,
             observation,
+            history,
         )
         for search in grounding["searches"][prior_search_count:]:
             observation = search["result"]
@@ -642,6 +684,7 @@ async def _run_async(
             purpose=decision["purpose"],
             payload={
                 "request": request,
+                "conversation_history": history,
                 "grounding": grounding,
                 "artifacts": artifacts,
                 "orchestration_observations": observations,
@@ -680,6 +723,7 @@ async def _run_async(
     return {
         "context_id": context_id,
         "request": request,
+        "conversation_history": history,
         "grounding": grounding,
         "tasks": tasks,
         "artifacts": artifacts,
@@ -698,6 +742,7 @@ def run_handoff(
     request: str = DEFAULT_REQUEST,
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -707,14 +752,55 @@ def run_handoff(
             settings or load_settings(),
             resolve_agent_urls(agent_urls),
             None,
+            conversation_history,
         )
     )
+
+
+def plan_handoff(
+    request: str = DEFAULT_REQUEST,
+    settings: Settings | None = None,
+    agent_urls: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Start a fresh A2A session and return its first Task Plan only.
+
+    Agent Cards are discovered and the Orchestrator performs its Observe and Decide
+    phases. No Team Task, external write, or approval submission is executed.
+    """
+    if not isinstance(request, str) or not request.strip():
+        raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
+    clean_request = request.strip()
+    resolved_settings = settings or load_settings()
+    cards = run_sync(discover_cards(resolve_agent_urls(agent_urls)))
+    grounding = no_grounding_requested()
+    observation = _orchestration_observation(
+        resolved_settings, clean_request, [], cards, grounding
+    )
+    decision, grounding = _orchestrator_turn(
+        resolved_settings,
+        clean_request,
+        [],
+        cards,
+        grounding,
+        observation=observation,
+    )
+    return {
+        "request": clean_request,
+        "observation": observation,
+        "decision": decision,
+        "grounding": grounding,
+        "execution_boundary": (
+            "fresh A2A Agent Card discovery and initial Orchestrator Task Plan only; "
+            "no Team Task, approval submission, or external write is executed."
+        ),
+    }
 
 
 def run_handoff_stream(
     request: str = DEFAULT_REQUEST,
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> Iterator[dict[str, Any]]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -725,7 +811,10 @@ def run_handoff_stream(
 
     def execute() -> dict[str, Any]:
         return run_sync(
-            _run_async(request.strip(), settings or load_settings(), urls, emit)
+            _run_async(
+                request.strip(), settings or load_settings(), urls, emit,
+                conversation_history,
+            )
         )
 
     with ThreadPoolExecutor(max_workers=1) as executor:

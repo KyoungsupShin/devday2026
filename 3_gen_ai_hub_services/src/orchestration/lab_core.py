@@ -1,6 +1,8 @@
 """Core workflow for ``01_orchestration.ipynb``."""
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
 from typing import Any, Callable
 
 from lab_common.ai_core import (
@@ -12,6 +14,8 @@ from lab_common.config import Settings
 
 
 _REGISTRY_CONFIG_PATH = "/registry/v2/orchestrationConfigs"
+DEFAULT_INPUT_PLACEHOLDER = "input_var1"
+_PLACEHOLDER_PATTERN = re.compile(r"{{\s*\?\s*([^}\s]+)\s*}}")
 
 
 def _sdk() -> dict[str, Any]:
@@ -66,6 +70,48 @@ def _json_value(value: Any) -> Any:
     return str(value)
 
 
+def _placeholder_values(value: Any) -> set[str]:
+    """Normalize a Registry placeholder field to its non-empty names."""
+    if isinstance(value, str):
+        return {value.strip()} if value.strip() else set()
+    if isinstance(value, list):
+        return {item.strip() for item in value if isinstance(item, str) and item.strip()}
+    return set()
+
+
+def input_placeholders(config: Mapping[str, Any]) -> list[str]:
+    """Return external input placeholder names used by a saved configuration.
+
+    Prompt templates declare placeholders as ``{{?name}}``. Grounding modules
+    additionally mark generated values under ``placeholders.output``; those must
+    not be sent with the request. Registry responses can use either snake_case
+    or camelCase module names, so this intentionally walks the raw response.
+    """
+    template_names: set[str] = set()
+    declared_inputs: set[str] = set()
+    generated_outputs: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, str):
+            template_names.update(match.group(1) for match in _PLACEHOLDER_PATTERN.finditer(value))
+            return
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+            return
+        if not isinstance(value, Mapping):
+            return
+        placeholders = value.get("placeholders")
+        if isinstance(placeholders, Mapping):
+            declared_inputs.update(_placeholder_values(placeholders.get("input")))
+            generated_outputs.update(_placeholder_values(placeholders.get("output")))
+        for item in value.values():
+            walk(item)
+
+    walk(config)
+    return sorted((template_names | declared_inputs) - generated_outputs)
+
+
 def _registry_get(client: Any, path: str, *, params: dict[str, Any]) -> Any:
     """Read Registry JSON without deserializing it through SDK config models.
 
@@ -116,9 +162,31 @@ def list_orchestration_configs(
 
 
 def invoke_saved_orchestration_config(
-    query: str, settings: Settings, *, config_id: str, service_factory: Callable[[Any], Any] | None = None,
+    query: str | None, settings: Settings, *, config_id: str,
+    placeholder_values: Mapping[str, str] | None = None,
+    placeholder_names: list[str] | None = None,
+    registry_client: Any | None = None,
+    service_factory: Callable[[Any], Any] | None = None,
 ) -> dict[str, str]:
-    cleaned_query, selected_id = _required(query, "질문"), _required(config_id, "Config ID")
+    selected_id = _required(config_id, "Config ID")
+    if placeholder_values is not None:
+        values = {
+            _required(str(name), "placeholder 이름"): _required(str(value), f"placeholder '{name}'")
+            for name, value in placeholder_values.items()
+        }
+    else:
+        names = placeholder_names
+        if names is None:
+            saved_config = get_orchestration_config(
+                selected_id, settings=settings, registry_client=registry_client
+            )
+            names = input_placeholders(saved_config)
+        if len(names) > 1:
+            raise ValueError(
+                "선택한 Orchestration에는 여러 입력 placeholder가 있습니다: "
+                f"{', '.join(names)}. placeholder_values로 각각의 값을 전달하세요."
+            )
+        values = {names[0]: _required(query or "", "질문")} if names else {}
     sdk = _sdk()
     config_ref = sdk["CompletionRequestConfigurationReferenceByIdConfigRef"](id=selected_id)
     if service_factory is None:
@@ -126,7 +194,7 @@ def invoke_saved_orchestration_config(
         service = sdk["OrchestrationService"](api_url=orchestration_url(settings), config_ref=config_ref)
     else:
         service = service_factory(config_ref)
-    return {"config_id": selected_id, "answer": _answer(service.run(placeholder_values={"user_query": cleaned_query}))}
+    return {"config_id": selected_id, "answer": _answer(service.run(placeholder_values=values))}
 
 
 def build_orchestration_service(settings: Settings, *, system_prompt: str, max_tokens: int = 700) -> Any:
@@ -137,7 +205,7 @@ def build_orchestration_service(settings: Settings, *, system_prompt: str, max_t
     apply_ai_core_environment(settings)
     template = sdk["Template"](template=[
         sdk["SystemMessage"](content=_required(system_prompt, "System prompt")),
-        sdk["UserMessage"](content="{{?user_query}}"),
+        sdk["UserMessage"](content=f"{{{{?{DEFAULT_INPUT_PLACEHOLDER}}}}}"),
     ])
     prompt = sdk["PromptTemplatingModuleConfig"](
         prompt=template, model=sdk["LLMModelDetails"](name=settings.llm_model, params=llm_model_params(settings, max_tokens=max_tokens))
@@ -149,4 +217,4 @@ def build_orchestration_service(settings: Settings, *, system_prompt: str, max_t
 def run_orchestration(query: str, settings: Settings) -> str:
     return _answer(build_orchestration_service(
         settings, system_prompt="You are a concise, helpful assistant."
-    ).run(placeholder_values={"user_query": _required(query, "질문")}))
+    ).run(placeholder_values={DEFAULT_INPUT_PLACEHOLDER: _required(query, "질문")}))

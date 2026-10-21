@@ -3,10 +3,11 @@ import json
 import os
 import random
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi.testclient import TestClient
 
@@ -32,10 +33,13 @@ from src.agent_to_agent.orchestration import (
     _parse_decision,
     _parse_observation,
     list_agents,
+    plan_handoff,
     run_handoff_steps,
 )
 from src.agent_to_agent_advanced import harness
+from src.agent_to_agent_advanced import grounding as advanced_grounding
 from src.agent_to_agent_advanced import ui as advanced_ui
+from src.agent_to_agent_advanced.tools import business_context as advanced_business_context
 from src.agent_to_agent_advanced.orchestration import (
     _orchestrator_turn as _advanced_orchestrator_turn,
 )
@@ -313,11 +317,23 @@ class FnbA2ATests(unittest.TestCase):
             for cell in notebook["cells"]
             if "REVISED_SOP_PROCESS" in "".join(cell.get("source", []))
         )
-        self.assertIn("설비팀 → 구매팀 → 제조기획팀 순서", source)
-        self.assertIn("세 Team 검토가 끝난 뒤의 최종 단계", source)
-        self.assertIn("RESTORE_SOP_PROCESS = '''## 프로세스", source)
-        self.assertIn("REVISED_SOP_PROCESS, RESTORE_SOP_PROCESS", source)
+        self.assertIn("구매팀 → 설비팀 순서", source)
+        self.assertIn("구매팀·설비팀 확인이 끝난 뒤의 최종 단계", source)
+        self.assertNotIn("RESTORE_SOP_PROCESS", source)
+        self.assertIn(
+            "prepare_default_sop_replacement(REVISED_SOP_PROCESS)", source
+        )
+        self.assertIn("원복 원본 파일: {sop_change.source_path}", source)
         self.assertNotIn("설비팀 관리자가", source)
+
+        fresh_plan_source = next(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell.get("id") == "a2a-sop-grounding-compare"
+        )
+        self.assertIn("plan_handoff(DEFAULT_REQUEST)", fresh_plan_source)
+        self.assertNotIn("next_step", fresh_plan_source)
+        self.assertNotIn("a2a_steps", fresh_plan_source)
 
     def test_context_rows_have_local_snapshot_scope_and_registered_relations(self):
         data_root = snapshot_reader.DATA_DIRECTORY
@@ -366,6 +382,18 @@ class FnbA2ATests(unittest.TestCase):
             result["search_boundary"],
         )
         self.assertNotIn("target_agent_id", result)
+
+    def test_advanced_context_search_uses_llm_selected_registered_ids(self):
+        selection = {
+            "context_ids": ["CTX-EQP-CIP-SEAL"],
+            "reason": "요청 대상이 CIP 펌프 실 키트 후보와 직접 일치합니다.",
+        }
+        with patch.object(advanced_business_context, "chat_text", return_value=json.dumps(selection)) as model:
+            result = advanced_business_context.search_business_context("CIP 펌프 메커니컬 실 키트를 구매해 주세요.")
+        self.assertEqual(model.call_count, 1)
+        self.assertEqual(result["state"], "found")
+        self.assertEqual([row["CONTEXT_ID"] for row in result["records"]], ["CTX-EQP-CIP-SEAL"])
+        self.assertIn("LLM이 등록 Context 후보에서 선택", result["search_boundary"])
 
     def test_focused_procurement_and_supply_tools_return_separate_evidence(self):
         procurement = lookup_procurement_evidence("CTX-RM-STRAWBERRY")
@@ -1139,6 +1167,7 @@ class FnbA2ATests(unittest.TestCase):
             grounding="{}",
             request="요청",
             artifacts="[]",
+            conversation_history="[]",
         )
         self.assertIn('"action":"delegate|handoff|complete"', rendered)
         self.assertIn(
@@ -1387,10 +1416,11 @@ class FnbA2ATests(unittest.TestCase):
                 },
             }
 
-        def fake_harness(_request, *, baseline_result, settings):
+        def fake_harness(_request, baseline_result, *, settings, chat_log=None):
             self.assertEqual(baseline_result["context_id"], expected_context_id)
             self.assertIs(settings, self.settings)
-            return {"variants": [], "baseline": baseline_result}
+            self.assertIsInstance(chat_log, list)
+            return {"trace": baseline_result, "decision": "no_change"}
 
         with (
             patch.object(advanced_ui, "list_agents", return_value=[]),
@@ -1400,25 +1430,29 @@ class FnbA2ATests(unittest.TestCase):
                 "persist_a2a_conversation",
                 return_value={"status": "completed"},
             ),
-            patch.object(advanced_ui, "run_harness_experiment", fake_harness),
+            patch.object(
+                advanced_ui, "active_runtime_overlays_for_request",
+                return_value=("", ""),
+            ),
+            patch.object(advanced_ui, "analyse_trace", fake_harness),
         ):
             app = advanced_ui.build_a2a_ui(self.settings)
             workflow = next(
                 item.fn
                 for item in app.fns.values()
-                if item.fn.__name__ == "run_workflow"
+                if item.fn is not None and item.fn.__name__ == "run_workflow"
             )
             harness_panel = next(
                 item.fn
                 for item in app.fns.values()
-                if item.fn.__name__ == "run_harness_panel"
+                if item.fn is not None and item.fn.__name__ == "run_harness_panel"
             )
             final_output = list(workflow("상태 전달 테스트"))[-1]
             baseline_result = final_output[3]
-            harness_output = harness_panel("상태 전달 테스트", baseline_result)
+            harness_output = harness_panel("상태 전달 테스트", baseline_result, [])
 
         self.assertEqual(baseline_result["context_id"], expected_context_id)
-        self.assertEqual(harness_output[1]["baseline"]["context_id"], expected_context_id)
+        self.assertEqual(harness_output[1]["trace"]["context_id"], expected_context_id)
 
     def test_harness_does_not_execute_invalid_editor_proposals(self):
         calls = []
@@ -1437,6 +1471,145 @@ class FnbA2ATests(unittest.TestCase):
         self.assertEqual(calls, [None])
         self.assertEqual(experiment["trials"]["candidate_1"]["status"], "failed")
         self.assertEqual(experiment["trials"]["composed"]["status"], "failed")
+
+    def test_trace_harness_proposes_ranked_options_without_a_probe(self):
+        editor_response = {
+            "decision": "propose",
+            "rationale": "재고 근거가 누락됐습니다.",
+            "evidence": ["procurement artifact에 재고 확인이 없습니다."],
+            "options": [
+                {
+                    "title": "Grounding 보강", "recommended": True,
+                    "rationale": "영향 범위가 가장 좁습니다.",
+                    "evidence": ["Grounding 검색이 없었습니다."],
+                    "changes": [{"component": "grounding_document", "target": "procurement-sop", "instruction": "재고와 대체품 근거를 우선 확인한다."}],
+                },
+                {
+                    "title": "Guardrail 보강", "recommended": False,
+                    "rationale": "완료 전 검증을 추가합니다.",
+                    "evidence": ["요청자 업데이트에 근거가 없습니다."],
+                    "changes": [{"component": "guardrail", "target": "orchestration", "instruction": "근거 없이는 완료하지 않는다."}],
+                },
+            ],
+        }
+        result = {"context_id": "trace-1", "artifacts": [], "observations": [], "middleware": [], "grounding": {"searches": []}, "termination": {"state": "completed"}}
+        with (
+            patch.object(harness, "classify_request_domain", return_value="procurement"),
+            patch("src.agent_to_agent_advanced.harness.chat_text", return_value=json.dumps(editor_response)) as editor,
+        ):
+            analysis = harness.analyse_trace("재고를 확인해 구매해 주세요.", result, self.settings)
+        self.assertEqual(editor.call_count, 1)
+        self.assertEqual(analysis["decision"], "propose")
+        self.assertTrue(analysis["options"][0]["recommended"])
+        self.assertEqual(analysis["options"][0]["option_id"], "option_1")
+        self.assertIn("expected_benefit", analysis["options"][0]["impact"])
+
+    def test_trace_summary_includes_repeated_chat_inputs_and_team_reuse(self):
+        result = {
+            "artifacts": [{"producer": "procurement"}, {"producer": "procurement"}],
+            "termination": {"state": "completed"},
+        }
+        trace = harness.trace_summary(result, [
+            {"kind": "field", "text": "납기일은 2026-10-30입니다."},
+            {"kind": "field", "text": "납기일은 2026-10-30입니다."},
+        ])
+        self.assertEqual(trace["duplicate_teams"], ["procurement"])
+        self.assertEqual(trace["user_input_count"], 2)
+        self.assertEqual(trace["repeated_user_inputs"], ["납기일은 2026-10-30입니다."])
+
+    def test_trace_summary_links_initial_task_to_missing_grounding_evidence(self):
+        result = {
+            "artifacts": [{
+                "producer": "procurement",
+                "orchestration": {
+                    "purpose": "재고와 대체품을 확인합니다.",
+                    "task_plan": {
+                        "summary": "구매 가능 여부 검토",
+                        "grounding_basis": "없음",
+                        "planned_tasks": ["재고 기준을 확인합니다."],
+                    },
+                },
+            }],
+            "grounding": {
+                "searches": [{
+                    "query": "대체품 승인 기준",
+                    "result": {
+                        "state": "grounded", "document_ids": ["sop-1"],
+                        "evidence": "제공된 문서에서 관련 근거를 찾지 못했습니다.",
+                    },
+                }],
+            },
+        }
+        trace = harness.trace_summary(result)
+        self.assertEqual(trace["initial_task"]["summary"], "구매 가능 여부 검토")
+        self.assertTrue(trace["grounding_outcomes"][0]["no_relevant_evidence"])
+
+    def test_skill_change_is_build_required_and_stages_manifest(self):
+        option = harness._proposal_option({
+            "title": "반복 입력 Skill", "recommended": True,
+            "rationale": "반복 입력을 줄입니다.", "evidence": ["동일 입력이 반복됨"],
+            "changes": [{"component": "skill", "target": "request-intake", "instruction": "반복 필드를 재사용 가능한 입력 양식으로 정리한다."}],
+        }, 1)
+        self.assertTrue(option["impact"]["build_required"])
+        analysis = {
+            "decision": "propose", "domain": "procurement", "trace_id": "trace-build",
+            "request": "구매 요청", "options": [option],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            revision = harness.apply_human_selection(analysis, "option_1", path=Path(directory) / "library.json")
+            artifact = harness.build_revision_artifact(revision, directory=Path(directory) / "builds")
+            manifest = json.loads(artifact.read_text(encoding="utf-8"))
+        self.assertEqual(revision["build_status"], "pending")
+        self.assertEqual(manifest["deployment_status"], "staged")
+        self.assertTrue(manifest["impact"]["build_required"])
+
+    def test_grounding_revision_is_runtime_ready_and_reaches_live_search(self):
+        option = harness._proposal_option({
+            "title": "구매 SOP 근거 우선", "recommended": True,
+            "rationale": "검색 근거를 보강합니다.", "evidence": ["Grounding 검색이 없었습니다."],
+            "changes": [{"component": "grounding_document", "target": "procurement-sop", "instruction": "재고와 대체품 근거를 우선 확인한다."}],
+        }, 1)
+        self.assertFalse(option["impact"]["build_required"])
+        with (
+            patch.object(advanced_grounding, "list_documents", return_value=[{"id": "doc-1"}]),
+            patch.object(advanced_grounding, "_grounded_answer", return_value="재고 근거") as search,
+        ):
+            result = advanced_grounding.collect_grounding_context(
+                "재고를 확인해 주세요.", self.settings, repository_id="repo-1",
+                runtime_overlay=harness.grounding_overlay_text(option["changes"]),
+            )
+        self.assertTrue(result["runtime_overlay_applied"])
+        self.assertEqual(search.call_args.args[3], "[procurement-sop] 재고와 대체품 근거를 우선 확인한다.")
+
+    def test_trace_harness_persists_human_selection_and_supports_rollback(self):
+        analysis = {
+            "decision": "propose", "domain": "procurement", "trace_id": "trace-2", "request": "구매 요청",
+            "options": [{
+                "option_id": "option_1", "title": "근거 보강", "recommended": True,
+                "rationale": "재고 확인 누락", "evidence": ["재고 근거 없음"],
+                "changes": [{"component": "guardrail", "target": "orchestration", "instruction": "재고 근거를 확인한다."}],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "library.json"
+            revision = harness.apply_human_selection(analysis, "option_1", "납기 판단은 제외", path=path)
+            self.assertIn("Human reviewer comment", revision["overlay"])
+            with patch.object(harness, "classify_request_domain", return_value="procurement") as selector:
+                overlay = harness.active_overlay_for_request("재고를 확인해 구매해 주세요.", self.settings, path=path)
+            self.assertEqual(selector.call_count, 1)
+            self.assertIn("재고 근거", overlay)
+            rolled_back = harness.rollback_active_revision("procurement", path=path)
+            self.assertEqual(rolled_back["status"], "rolled_back")
+            self.assertEqual(harness.active_overlay_for_request("재고를 확인해 구매해 주세요.", self.settings, path=path), "")
+
+    def test_harness_domain_is_selected_by_llm_and_restricted_to_allowed_values(self):
+        with patch.object(harness, "chat_text", return_value='{"domain":"finance"}') as model:
+            domain = harness.classify_request_domain("고객 주문의 비용 영향을 검토해 주세요.", self.settings)
+        self.assertEqual(domain, "finance")
+        self.assertEqual(model.call_count, 1)
+        with patch.object(harness, "chat_text", return_value='{"domain":"unknown"}'):
+            with self.assertRaises(ValueError):
+                harness.classify_request_domain("일반 요청", self.settings)
 
     def test_harness_verifies_an_applied_flow_and_supports_session_rollback(self):
         baseline = {
@@ -1502,7 +1675,7 @@ class FnbA2ATests(unittest.TestCase):
             ]
         }
         before_adoption = _harness_chat_html(experiment)
-        self.assertIn("Harness² 실험방", before_adoption)
+        self.assertIn("Harness Labs", before_adoption)
         self.assertIn("Probe A", before_adoption)
         self.assertIn("사람 채택 후보 선택", before_adoption)
         self.assertNotIn("비공개 세션 보조 지침", before_adoption)
@@ -1529,10 +1702,38 @@ class FnbA2ATests(unittest.TestCase):
             rendered = _chat_message_html(
                 {"sender": sender, "kind": kind, "text": "상태를 공유했습니다."}
             )
-            self.assertIn('<svg viewBox="0 0 24 24"', rendered)
             self.assertNotIn(
                 f'<div class="a2a-group-chat__avatar">{sender[:1]}', rendered
             )
+            if sender == "Orchestration Agent":
+                self.assertIn('data-avatar-icon="sap"', rendered)
+                self.assertIn('sap_logo.png', rendered)
+            elif sender == "F&B 구매팀 Agent":
+                self.assertIn('data-avatar-icon="joule"', rendered)
+                self.assertIn('joule.png', rendered)
+            else:
+                self.assertIn('<svg viewBox="0 0 24 24"', rendered)
+
+        self.assertIn(
+            'data-avatar-icon="sap"',
+            _chat_message_html(
+                {
+                    "sender": "Orchestration Agent",
+                    "kind": "orchestrator",
+                    "text": "다음 작업을 계획합니다.",
+                }
+            ),
+        )
+        self.assertIn(
+            'data-avatar-icon="joule"',
+            _chat_message_html(
+                {
+                    "sender": "F&B 구매팀 Agent",
+                    "kind": "agent",
+                    "text": "검토를 시작합니다.",
+                }
+            ),
+        )
 
     def test_orchestration_addendum_is_appended_without_changing_default_contract(self):
         cards = {
@@ -1578,6 +1779,58 @@ class FnbA2ATests(unittest.TestCase):
         self.assertEqual(steps[4]["team_id"], "fb-procurement-team")
         self.assertEqual(steps[4]["task"], {"status": "working"})
         self.assertEqual(steps[5]["record"]["producer"], "fb-procurement-team")
+
+    def test_plan_handoff_returns_first_orchestrator_plan_without_team_task(self):
+        cards = {
+            "fb-procurement-team": SimpleNamespace(
+                name="구매팀", description="구매 검토"
+            )
+        }
+        observation = {"chat_summary": "구매 요청을 확인했습니다."}
+        decision = {
+            "action": "delegate",
+            "target_agent_id": "fb-procurement-team",
+            "purpose": "구매 조건을 확인합니다.",
+            "reason": "SOP 근거",
+            "task_plan": {
+                "grounding_basis": "구매팀 확인이 먼저 필요합니다.",
+                "summary": "구매 조건을 확인합니다.",
+                "planned_tasks": ["재고와 공급 조건을 확인합니다."],
+            },
+        }
+        grounding = {"state": "grounded", "searches": []}
+        discover = Mock(return_value="discovery-awaitable")
+        with (
+            patch(
+                "src.agent_to_agent.orchestration.resolve_agent_urls",
+                return_value={"fb-procurement-team": "http://team"},
+            ),
+            patch(
+                "src.agent_to_agent.orchestration.discover_cards",
+                new=discover,
+            ),
+            patch(
+                "src.agent_to_agent.orchestration.run_sync", return_value=cards
+            ),
+            patch(
+                "src.agent_to_agent.orchestration._orchestration_observation",
+                return_value=observation,
+            ) as observe,
+            patch(
+                "src.agent_to_agent.orchestration._orchestrator_turn",
+                return_value=(decision, grounding),
+            ) as decide,
+        ):
+            result = plan_handoff("구매 요청", self.settings)
+
+        discover.assert_called_once_with({"fb-procurement-team": "http://team"})
+        observe.assert_called_once()
+        self.assertEqual(observe.call_args.args[:4], (self.settings, "구매 요청", [], cards))
+        self.assertEqual(observe.call_args.args[4]["state"], "not_requested")
+        self.assertEqual(result["decision"], decision)
+        self.assertEqual(result["grounding"], grounding)
+        self.assertIn("no Team Task", result["execution_boundary"])
+        self.assertEqual(decide.call_args.kwargs["observation"], observation)
 
 
 if __name__ == "__main__":

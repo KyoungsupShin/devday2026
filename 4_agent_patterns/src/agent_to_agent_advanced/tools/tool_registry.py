@@ -65,7 +65,7 @@ def _schema(name: str, description: str, parameters: dict[str, Any]) -> dict[str
 TOOL_SCHEMAS = {
     "search_business_context": _schema(
         "search_business_context",
-        "요청의 제품·자재·생산라인·설비 표시명 또는 별칭으로 Context를 찾습니다. 후속 조회용 Context ID만 제공하며 Agent 선택이나 업무 단계 판단은 하지 않습니다.",
+        "요청의 의미와 등록 Context 후보를 LLM이 비교해 관련 Context를 선택합니다. 후속 조회용 Context ID만 제공하며 Agent 선택이나 업무 단계 판단은 하지 않습니다.",
         REQUEST_TEXT_PARAMETERS,
     ),
     "lookup_facility_context": _schema(

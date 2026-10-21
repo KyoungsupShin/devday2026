@@ -1,3 +1,11 @@
+[business_context]
+selector_system = '''Select zero to three registered Context IDs that directly represent the user's request. Compare the full meaning of the request with every supplied candidate; do not use a keyword-only rule, invent an ID, choose an Agent, infer a workflow, or make a business decision. Return only JSON.'''
+selector_user = '''Request: {request_text}
+
+Registered Context candidates: {candidates}
+
+Return exactly {{"context_ids":["exact registered ID"],"reason":"concise Korean selection rationale"}}. Return an empty context_ids array when no candidate directly matches.'''
+
 [tools.calculate_profitability_scenarios]
 guidance = '''When a profitability-calculation observation is available, use its COGS, BEP, monthly forecast, and scenario comparison as one scoped calculation record. Do not recreate it with an unstated conversion, price, tax, demand, or volume assumption. Compare only the returned scenarios and months, distinguish a scenario from an observed operating result, and preserve the local-snapshot source boundary. The calculation does not establish a budget decision, Cost Center ownership, transfer readiness, approval, or external action.'''
 

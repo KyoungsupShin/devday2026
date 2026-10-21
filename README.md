@@ -155,8 +155,8 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | --- | --- | --- |
 | `01_prompt_and_model.ipynb` | system/user prompt와 모델 응답 비교 | Prompt 조건이 응답 형식과 근거에 미치는 영향을 확인한다. |
 | `02_embeddings.ipynb` | embedding과 cosine similarity | 문장 간 유사도를 수치와 맥락으로 함께 해석한다. |
-| `03_reranker_decision_model.ipynb` | 정책 후보 reranking | 낮은 score 또는 작은 margin은 사람 검토로 보낸다. |
-| `04_business_embedding_cluster.ipynb` | 비즈니스 문의 clustering | 라벨 기반 domain adapter 결과를 확인한다. |
+| `03_embedding_advanced.ipynb` | 비즈니스 문의 clustering | 라벨 기반 domain adapter 결과를 확인한다. |
+| `04_reranker_decision_model.ipynb` | 정책 후보 reranking | 낮은 score 또는 작은 margin은 사람 검토로 보낸다. |
 
 필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. 외부 reranker는 `RERANK_ENDPOINT`, `RERANK_API_KEY`로 연결할 수 있습니다.
 
@@ -189,6 +189,7 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | `02_agent_loop_mcp.ipynb` | Tool calling loop | 관찰 → 읽기 전용 도구 호출 → 재관찰 흐름을 확인한다. |
 | `03_agent_to_agent.ipynb` | A2A | Message·Task·Artifact 기반 handoff를 확인한다. |
 | `04_agent_to_agent_advanced.ipynb` | Advanced A2A | Team 협업과 선택적 Codex App Server/SQL Agent를 확인한다. |
+| `05_build_your_harness.ipynb` | Build your harness | SAP BTP 기반 Harness의 실행·도구·Agent·거버넌스 아키텍처와 구현 순서를 설계한다. |
 
 03·04를 실행하기 전에 JupyterLab과 별도의 터미널에서 아래 서버를 시작합니다.
 

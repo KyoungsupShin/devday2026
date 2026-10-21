@@ -10,6 +10,13 @@ from lab_common.config import Settings
 
 MAX_CHAT_HISTORY_MESSAGES = 12
 MAX_CHAT_HISTORY_CHARACTERS = 12_000
+DEFAULT_COMPARISON_SYSTEM_PROMPT = (
+    "너는 교육 보조자다. 반드시 한국어 Markdown으로만 답한다. "
+    "설명 문단을 쓰지 말고, 먼저 '## 핵심 요약' 제목과 한 문장을 쓴다. "
+    "그 다음 '## 구성 요소' 제목 아래에 '구성 요소 | 역할' 열을 가진 "
+    "Markdown 표를 정확히 세 행으로 작성한다. 마지막에는 '## 기억할 점' 제목과 "
+    "핵심 bullet 하나를 작성한다. 제목, 표, bullet 외의 텍스트는 쓰지 않는다."
+)
 
 
 def compare_prompts(
@@ -18,17 +25,21 @@ def compare_prompts(
     chat_caller: Callable[
         [Settings, list[dict[str, str]], str | None], str
     ] = chat_text,
+    system_prompt: str = DEFAULT_COMPARISON_SYSTEM_PROMPT,
 ) -> dict[str, str]:
     cleaned = question.strip()
     if not cleaned:
         raise ValueError("질문을 입력하세요.")
+    constrained_system_prompt = system_prompt.strip()
+    if not constrained_system_prompt:
+        raise ValueError("비교할 system prompt를 입력하세요.")
     baseline = chat_caller(settings, [{"role": "user", "content": cleaned}], None)
     constrained = chat_caller(
         settings,
         [
             {
                 "role": "system",
-                "content": "너는 교육 보조자다. 한국어로, 정확히 한 문장으로만 답한다.",
+                "content": constrained_system_prompt,
             },
             {"role": "user", "content": cleaned},
         ],

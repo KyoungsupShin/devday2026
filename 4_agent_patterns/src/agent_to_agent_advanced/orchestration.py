@@ -45,6 +45,36 @@ from .transport import (
 )
 
 
+MAX_CONVERSATION_MESSAGES = 6
+MAX_CONVERSATION_CHARS = 6_000
+
+
+def _normalize_conversation_history(
+    conversation_history: list[dict[str, Any]] | None,
+) -> list[dict[str, str]]:
+    """Keep a bounded, role-labelled transcript for one browser chat session."""
+    normalized: list[dict[str, str]] = []
+    for item in conversation_history or []:
+        if not isinstance(item, dict):
+            continue
+        role, content = item.get("role"), item.get("content")
+        if role not in {"user", "assistant"} or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if content:
+            normalized.append({"role": role, "content": content})
+    normalized = normalized[-MAX_CONVERSATION_MESSAGES:]
+    total, bounded = 0, []
+    for item in reversed(normalized):
+        remaining = MAX_CONVERSATION_CHARS - total
+        if remaining <= 0:
+            break
+        content = item["content"][-remaining:]
+        bounded.append({**item, "content": content})
+        total += len(content)
+    return list(reversed(bounded))
+
+
 MAX_HARNESS_ADDENDUM_CHARS = 1_600
 
 
@@ -347,6 +377,7 @@ def _orchestration_observation(
     artifacts: list[dict[str, Any]],
     cards: dict[str, AgentCard],
     grounding: dict[str, Any],
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Generate the public Observe phase before the next orchestration action."""
     available = [
@@ -359,6 +390,9 @@ def _orchestration_observation(
         grounding=json.dumps(grounding, ensure_ascii=False),
         available=json.dumps(available, ensure_ascii=False),
         artifacts=json.dumps(artifacts, ensure_ascii=False),
+        conversation_history=json.dumps(
+            _normalize_conversation_history(conversation_history), ensure_ascii=False
+        ),
     )
     messages = [
         {
@@ -380,6 +414,8 @@ def _orchestrator_turn(
     on_human_approval: Callable[[dict[str, Any]], None] | None = None,
     observation: dict[str, list[str]] | None = None,
     harness_addendum: str = "",
+    grounding_overlay: str = "",
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Let the model optionally search manuals before one orchestration decision."""
     available = [
@@ -394,6 +430,9 @@ def _orchestrator_turn(
         grounding=json.dumps(grounding_context, ensure_ascii=False),
         request=request,
         artifacts=json.dumps(artifacts, ensure_ascii=False),
+        conversation_history=json.dumps(
+            _normalize_conversation_history(conversation_history), ensure_ascii=False
+        ),
     )
     prompt = _append_harness_addendum(prompt, harness_addendum)
     messages: list[dict[str, Any]] = [
@@ -440,7 +479,9 @@ def _orchestrator_turn(
             query = query.strip()
             if on_grounding:
                 on_grounding({"type": "grounding_started", "query": query})
-            observation = collect_grounding_context(query, settings)
+            observation = collect_grounding_context(
+                query, settings, runtime_overlay=grounding_overlay
+            )
             grounding_context = add_grounding_search(
                 grounding_context, query, observation
             )
@@ -525,6 +566,8 @@ async def _run_async(
     urls: dict[str, str],
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
     harness_addendum: str = "",
+    grounding_overlay: str = "",
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     context_id, cards = str(uuid4()), await discover_cards(urls)
     artifacts: list[dict[str, Any]] = []
@@ -534,6 +577,7 @@ async def _run_async(
     human_approvals: list[dict[str, Any]] = []
     termination: dict[str, Any] | None = None
     grounding = no_grounding_requested()
+    history = _normalize_conversation_history(conversation_history)
     loop = asyncio.get_running_loop()
 
     def emit_grounding_event(event: dict[str, Any]) -> None:
@@ -577,6 +621,7 @@ async def _run_async(
             artifacts,
             cards,
             grounding,
+            history,
         )
         observation_record = {"step": step + 1, "observation": observation}
         observations.append(observation_record)
@@ -611,6 +656,8 @@ async def _run_async(
             emit_human_approval_event,
             observation,
             harness_addendum,
+            grounding_overlay,
+            history,
         )
         for search in grounding["searches"][prior_search_count:]:
             observation = search["result"]
@@ -683,10 +730,15 @@ async def _run_async(
             purpose=decision["purpose"],
             payload={
                 "request": request,
+                "conversation_history": history,
                 "grounding": grounding,
                 "artifacts": artifacts,
                 "orchestration_observations": observations,
                 "human_approvals": human_approvals,
+                # A human-approved Harness Labs revision is carried to the
+                # selected Team as contextual guidance; it never changes the
+                # registered Agent Card or Tool allow-list.
+                "harness_overlay": harness_addendum,
             },
             on_update=task_update,
         )
@@ -721,6 +773,7 @@ async def _run_async(
     return {
         "context_id": context_id,
         "request": request,
+        "conversation_history": history,
         "grounding": grounding,
         "tasks": tasks,
         "artifacts": artifacts,
@@ -740,6 +793,8 @@ def run_handoff(
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
     harness_addendum: str | None = None,
+    grounding_overlay: str | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -750,6 +805,8 @@ def run_handoff(
             resolve_agent_urls(agent_urls),
             None,
             _validated_harness_addendum(harness_addendum),
+            grounding_overlay or "",
+            conversation_history,
         )
     )
 
@@ -759,6 +816,8 @@ def run_handoff_stream(
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
     harness_addendum: str | None = None,
+    grounding_overlay: str | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> Iterator[dict[str, Any]]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -770,7 +829,10 @@ def run_handoff_stream(
 
     def execute() -> dict[str, Any]:
         return run_sync(
-            _run_async(request.strip(), settings or load_settings(), urls, emit, addendum)
+            _run_async(
+                request.strip(), settings or load_settings(), urls, emit, addendum,
+                grounding_overlay or "", conversation_history,
+            )
         )
 
     with ThreadPoolExecutor(max_workers=1) as executor:

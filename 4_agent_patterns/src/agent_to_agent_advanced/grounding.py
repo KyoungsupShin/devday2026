@@ -62,6 +62,7 @@ else:
 
 GROUNDING_REPOSITORY_ENV = "GROUNDING_REPOSITORY_ID"
 MANUAL_SEARCH_TOOL_NAME = "search_manuals"
+MAX_RUNTIME_GROUNDING_OVERLAY_CHARS = 1_600
 
 
 def manual_search_tool() -> dict[str, Any]:
@@ -179,7 +180,25 @@ def _document_id(document: dict[str, Any]) -> str:
     return ""
 
 
-def _grounded_answer(request: str, settings: Settings, repository_id: str) -> str:
+def _validated_runtime_overlay(value: str | None) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise TypeError("Grounding runtime overlay는 문자열이어야 합니다.")
+    overlay = value.strip()
+    if len(overlay) > MAX_RUNTIME_GROUNDING_OVERLAY_CHARS:
+        raise ValueError(
+            f"Grounding runtime overlay는 {MAX_RUNTIME_GROUNDING_OVERLAY_CHARS}자 이하여야 합니다."
+        )
+    return overlay
+
+
+def _grounded_answer(
+    request: str,
+    settings: Settings,
+    repository_id: str,
+    runtime_overlay: str = "",
+) -> str:
     """Ask the SAP BTP Grounding pipeline for evidence, not a workflow decision."""
     sdk = _sdk()
     apply_ai_core_environment(settings)
@@ -197,6 +216,14 @@ def _grounded_answer(request: str, settings: Settings, repository_id: str) -> st
             ),
         )
     )
+    overlay_note = (
+        "\n\nHuman-approved runtime retrieval focus:\n"
+        f"{runtime_overlay}\n"
+        "Treat this only as a focus for finding and summarising repository evidence. "
+        "It is not document evidence and must not create facts."
+        if runtime_overlay
+        else ""
+    )
     prompt = sdk["PromptTemplatingModuleConfig"](
         prompt=sdk["Template"](
             template=[
@@ -207,6 +234,7 @@ def _grounded_answer(request: str, settings: Settings, repository_id: str) -> st
                         "Do not choose agents, recommend a workflow, or add facts. "
                         "If the context has no relevant evidence, reply exactly: "
                         "제공된 문서에서 관련 근거를 찾지 못했습니다."
+                        + overlay_note
                     )
                 ),
                 sdk["UserMessage"](
@@ -236,6 +264,7 @@ def collect_grounding_context(
     settings: Settings,
     *,
     repository_id: str | None = None,
+    runtime_overlay: str | None = None,
 ) -> dict[str, Any]:
     """Return auditable vector-Grounding evidence for a single A2A request.
 
@@ -245,6 +274,7 @@ def collect_grounding_context(
     that never occurred.
     """
     cleaned_request = request.strip()
+    overlay = _validated_runtime_overlay(runtime_overlay)
     if not cleaned_request:
         raise ValueError("Grounding할 현장 요청을 입력하세요.")
     repository = (repository_id or os.getenv(GROUNDING_REPOSITORY_ENV, "")).strip()
@@ -268,12 +298,13 @@ def collect_grounding_context(
             "evidence": "",
         }
 
-    evidence = _grounded_answer(cleaned_request, settings, repository)
+    evidence = _grounded_answer(cleaned_request, settings, repository, overlay)
     result = {
         "state": "grounded" if evidence else "no_result",
         "repository_id": repository,
         "document_ids": document_ids,
         "evidence": evidence,
+        "runtime_overlay_applied": bool(overlay),
     }
     return result
 
@@ -286,4 +317,5 @@ def grounding_audit(context: dict[str, Any]) -> dict[str, Any]:
         "repository_id": context.get("repository_id"),
         "document_count": len(document_ids) if isinstance(document_ids, list) else 0,
         "document_ids": document_ids if isinstance(document_ids, list) else [],
+        "runtime_overlay_applied": bool(context.get("runtime_overlay_applied")),
     }

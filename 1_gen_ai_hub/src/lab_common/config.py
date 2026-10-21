@@ -70,6 +70,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         allow_write_tools=os.getenv("ALLOW_WRITE_TOOLS", "false").lower() == "true",
         llm_seed=_llm_seed_from_environment(),
         llm_deployment_id=os.getenv("AICORE_LLM_DEPLOYMENT_ID", "").strip(),
+        rpt_model=os.getenv("RPT_MODEL", "sap-rpt-1.5-large").strip(),
+        rpt_deployment_id=os.getenv("AICORE_RPT_DEPLOYMENT_ID", "").strip(),
     )
 
 
@@ -87,6 +89,8 @@ class Settings:
     allow_write_tools: bool
     llm_seed: int = DEFAULT_LLM_SEED
     llm_deployment_id: str = ""
+    rpt_model: str = "sap-rpt-1.5-large"
+    rpt_deployment_id: str = ""
 
     def missing_ai_core_fields(self) -> list[str]:
         values = {
