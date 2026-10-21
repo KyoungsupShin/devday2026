@@ -40,10 +40,10 @@
 | [01_agent_workflow.ipynb](notebooks/01_agent_workflow.ipynb) | 고정 전이 workflow | 코드가 정한 순서 안에서 LLM이 route를 선택하는 흐름을 확인합니다. |
 | [02_agent_loop_mcp.ipynb](notebooks/02_agent_loop_mcp.ipynb) | Tool calling loop | 관찰 → 읽기 전용 도구 호출 → 재관찰의 반복과 Agent graph를 확인합니다. 별도 MCP 서버는 필요하지 않습니다. |
 | [03_agent_to_agent.ipynb](notebooks/03_agent_to_agent.ipynb) | A2A | F&B Team Agent가 A2A Protocol 1.0의 Message·Task·Artifact로 handoff하는 방식을 확인합니다. |
-| [04_agent_to_agent_advanced.ipynb](notebooks/04_agent_to_agent_advanced.ipynb) | Advanced A2A | Team 단위 협업과 선택적 Codex App Server·SQL Generator Agent의 역할을 확인합니다. |
-| [05_build_your_harness.ipynb](notebooks/05_build_your_harness.ipynb) | Build your harness | SAP BTP, Integration Suite MCP, Joule, HANA Cloud, LeanIX Agent Hub를 Harness에 연결하는 아키텍처와 구현 우선순위를 설계합니다. |
+| [04_agent_to_agent_advanced.ipynb](notebooks/04_agent_to_agent_advanced.ipynb) | Advanced A2A + Harness Labs | Team·Codex SQL Agent handoff 뒤 실행 trace를 분석하고, 사람 선택으로 개선안을 runtime overlay에 반영·롤백합니다. |
+| [05_build_your_harness.ipynb](notebooks/05_build_your_harness.ipynb) | Build your harness | SAP BTP, Integration Suite MCP, Joule, HANA Cloud, LeanIX Agent Hub를 연결하는 운영 Harness 아키텍처와 구현 우선순위를 설계합니다. |
 
-01부터 04까지 실행하면 단일 workflow에서 조직 경계를 넘는 Agent 협업까지 제어 범위가 확장되는 모습을 비교할 수 있습니다. 05는 이를 SAP BTP의 운영 Harness로 확장하는 Markdown 설계 노트북입니다.
+01부터 04까지 실행하면 단일 workflow에서 조직 경계를 넘는 Agent 협업까지 제어 범위가 확장되는 모습을 비교할 수 있습니다. 04에서는 Harness Labs가 방금 실행한 trace만 분석해 개선 후보를 제안하며, 사람 검토자가 선택하기 전에는 runtime overlay를 적용하지 않습니다. 05는 이를 SAP BTP의 운영 Harness로 확장하는 Markdown 설계 노트북입니다.
 
 </details>
 
@@ -53,6 +53,14 @@
 <summary><strong>🖥️ A2A 실습 준비</strong></summary>
 
 03과 04는 JupyterLab과 별도의 터미널에서 각각의 로컬 A2A Agent 서버를 실행한 뒤 시작합니다. 03은 9111~9122, 04는 9211~9223 포트를 사용하므로 두 서버 묶음을 동시에 실행할 수 있습니다. 포트가 이미 사용 중이면 기존 프로세스를 종료한 뒤 다시 시작하세요.
+
+```bash
+# 03 · A2A Team Agent 서버
+.venv/bin/python main.py fnb-a2a-local
+
+# 04 · Advanced A2A Team 및 Codex SQL Agent 서버
+.venv/bin/python main.py fnb-a2a-advanced-local
+```
 
 구체적인 서버 실행 명령은 [루트 README](../README.md)의 Agent Patterns 안내를 따릅니다. 04의 Codex SQL Generator Agent는 읽기 전용 sandbox에서 단일 읽기 전용 SQL 초안만 만들며, SQL을 실행하지 않습니다.
 
@@ -65,6 +73,8 @@
 
 - Team·Sub-agent·Tool 선택은 LLM이 결정해도, 도구 권한은 catalog와 registry로 명시적으로 제한합니다.
 - Grounding 저장소가 비어 있거나 조회에 실패하면 UI와 로그에 그 상태를 표시하고 실행을 계속하지 않습니다.
+- Harness Labs는 실제 실행 trace를 읽어 개선안을 제안할 뿐이며, 사람 선택 전에는 revision·Grounding overlay·원본 Prompt·Tool·SOP를 자동으로 변경하지 않습니다.
+- Codex SQL Generator Agent는 단일 읽기 전용 SQL 초안만 만들고, SQL이나 외부 시스템을 실행하지 않습니다.
 - Outlook 기능은 초안만 생성합니다. 사람이 수신자·제목·본문을 확인하고 승인하더라도, 별도 인증과 `ALLOW_WRITE_TOOLS=true`가 모두 있어야 외부 전송이 가능합니다.
 
 </details>

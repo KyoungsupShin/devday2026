@@ -12,12 +12,6 @@ BAIP를 통해 SAP BTP AI Core와 Gen AI Hub의 기능을 활용하고, **AI-Fir
 
 <br>
 
-<strong>02 · Agent Loop &amp; MCP</strong><br>
-<img src="4_agent_patterns/assets/thumbnails/gifs/02_agent_loop_mcp.gif" alt="Agent Loop과 MCP Tool Calling 미리보기" width="100%"><br>
-관찰·도구 호출·재관찰을 반복하는 Agent loop와 Specialist Agent의 실행 상태를 확인합니다.
-
-<br>
-
 <strong>03 · Agent-to-Agent 협업</strong><br>
 <img src="4_agent_patterns/assets/thumbnails/gifs/03_agent_to_agent.gif" alt="Agent-to-Agent 협업 미리보기" width="100%"><br>
 요청부터 A2A handoff, 현업용 최종 업데이트까지 확인합니다.
@@ -170,7 +164,7 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | `03_embedding_advanced.ipynb` | 비즈니스 문의 clustering | 라벨 기반 domain adapter 결과를 확인한다. |
 | `04_reranker_decision_model.ipynb` | 정책 후보 reranking | 낮은 score 또는 작은 margin은 사람 검토로 보낸다. |
 
-필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. 외부 reranker는 `RERANK_ENDPOINT`, `RERANK_API_KEY`로 연결할 수 있습니다.
+필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. 외부 reranker 또는 Harness decision model은 `RERANK_ENDPOINT`, `RERANK_API_KEY`로 연결할 수 있습니다. score와 margin은 자동 승인·반려가 아닌 사람 검토 우선순위를 정하는 근거로만 사용합니다.
 
 </details>
 
@@ -184,8 +178,13 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | --- | --- | --- |
 | `01_orchestration.ipynb` | Orchestration 호출, prompt templating, 필터·마스킹 | 등록된 서비스를 조회하고 호출 결과를 확인한다. |
 | `02_grounding.ipynb` | 문서 chunk 기반 질의 | 답변과 함께 참조한 문서 근거를 확인한다. |
+| `03_rpt_risk_classification.ipynb` | SAP RPT 교육용 holdout 평가·단건 분류 | feature·label만 전달하고, 지표·감사 집계를 사람 검토용으로 확인한다. |
 
-Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연계는 선택 사항이며, 원본 문서는 Storage에 보관되고 질의는 인덱싱된 vector chunk를 근거로 수행합니다.
+Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연계는 선택 사항이며, 원본 문서는 Storage에 보관되고 질의는 인덱싱된 vector chunk를 근거로 수행합니다. RPT 실습은 RUNNING foundation-model deployment에 읽기 전용 예측만 요청하며, 학습 실행·deployment 생성·자동 신용 의사결정은 수행하지 않습니다.
+
+```bash
+.venv/bin/python 3_gen_ai_hub_services/main.py rpt-evaluate
+```
 
 </details>
 
@@ -208,6 +207,8 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | `04_agent_to_agent_advanced.ipynb` | Advanced A2A | Team 협업과 선택적 Codex App Server/SQL Agent를 확인한다. |
 | `05_build_your_harness.ipynb` | Build your harness | SAP BTP 기반 Harness의 실행·도구·Agent·거버넌스 아키텍처와 구현 순서를 설계한다. |
 
+04 Advanced A2A는 실행 trace를 Harness Labs에서 분석해 개선안을 제시하고, 사람이 선택한 revision만 세션의 runtime overlay로 반영합니다. 반영 전·후의 실행 흐름은 비교할 수 있으며 원본 Prompt·Tool·SOP는 변경하지 않습니다.
+
 03·04를 실행하기 전에 JupyterLab과 별도의 터미널에서 아래 서버를 시작합니다.
 
 | 노트북 | 실행 명령 | 포트 |
@@ -228,6 +229,7 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 | 기능 | 추가 환경변수 | 사용 단계 |
 | --- | --- | --- |
 | 임베딩·reranker | `EMBED_MODEL`, `RERANK_MODEL` 또는 `RERANK_ENDPOINT`, `RERANK_API_KEY` | 02, 04 |
+| SAP RPT | `RPT_MODEL`, 선택적으로 `AICORE_RPT_DEPLOYMENT_ID` | 03 |
 | Grounding | `GROUNDING_REPOSITORY_ID`, 선택적으로 `AICORE_ORCHESTRATION_DEPLOYMENT_URL` | 03, 04 |
 | Object Storage | `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_BUCKET` | 03 |
 | LiteLLM Proxy | `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL` | 01 (선택) |
@@ -235,6 +237,7 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 
 - service key, API key, access key는 노트북 출력·로그·Git에 남기지 않습니다.
 - 기본 예제와 fixture 기반 Tool은 읽기 전용입니다.
+- SAP RPT 예측에는 교육용 feature·label만 전달하며, 식별자와 감사 속성은 로컬 검토 범위에 둡니다.
 - Outlook 발송은 UI에서 사람이 내용을 확인·승인하고, 별도 인증과 `ALLOW_WRITE_TOOLS=true`가 모두 설정된 경우에만 가능합니다.
 - Grounding과 Object Storage에는 실습 권한 범위의 문서만 사용합니다.
 

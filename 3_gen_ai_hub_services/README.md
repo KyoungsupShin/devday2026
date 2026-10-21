@@ -32,7 +32,13 @@ Grounding 저장소가 비어 있거나 조회에 실패한 상태는 답변 근
 | [02_grounding.ipynb](notebooks/02_grounding.ipynb) | 인덱싱된 문서 chunk를 근거로 질의하고, 답변의 참조 근거를 확인합니다. | 생성된 답변과 실제로 참조한 chunk를 분리해 검토합니다. |
 | [03_rpt_risk_classification.ipynb](notebooks/03_rpt_risk_classification.ipynb) | ID를 제거한 교육용 신용위험 표 데이터를 SAP RPT로 80/20 holdout 평가하고 한 건을 분류합니다. | RPT 요청에 전달되는 feature·label, 성능 지표, 감사용 집계를 분리해 검토합니다. |
 
-먼저 Orchestration의 서비스 호출 흐름을 이해한 뒤 Grounding에서 문서 근거가 답변으로 연결되는 방식을 확인하세요. RPT 실습은 별도 학습·deployment 생성 없이 RUNNING foundation model에 읽기 전용 예측만 요청합니다.
+먼저 Orchestration의 서비스 호출 흐름을 이해한 뒤 Grounding에서 문서 근거가 답변으로 연결되는 방식을 확인하세요. RPT 실습은 별도 학습·deployment 생성 없이 RUNNING foundation model에 읽기 전용 예측만 요청합니다. 평가 결과 CSV는 `results/rpt_risk/`에 저장할 수 있으며, 실제 고객 데이터나 식별자는 저장하지 않습니다.
+
+```bash
+.venv/bin/python main.py rpt-evaluate
+```
+
+`RPT_MODEL`은 기본값 `sap-rpt-1.5-large`를 사용하며, 반복 가능한 대상이 필요하면 `AICORE_RPT_DEPLOYMENT_ID`로 RUNNING deployment 하나를 고정합니다.
 
 </details>
 
@@ -53,6 +59,7 @@ Grounding 노트북의 Object Storage 연계는 UTF-8 Markdown 원본을 Object 
 - 등록된 Orchestration을 호출하고 서비스 응답을 확인할 수 있습니다.
 - Grounding 답변과 참조 문서 근거를 함께 검토할 수 있습니다.
 - 교육용 risk 데이터의 RPT 분류 지표와 감사용 그룹 집계를 자동 신용 의사결정과 구분해 검토할 수 있습니다.
+- RPT에 feature·label만 전달하고, ID와 감사 속성이 요청 경계를 넘지 않는 것을 확인할 수 있습니다.
 - 저장소 미설정·조회 실패를 근거 있는 답변처럼 표시하지 않습니다.
 
 테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.

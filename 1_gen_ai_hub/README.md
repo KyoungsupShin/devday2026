@@ -25,10 +25,10 @@ AI Core service key를 로컬 환경에 연결하고, 이후 실습에서 사용
 | 노트북 | 무엇을 하나요? | 확인할 결과 |
 | --- | --- | --- |
 | [00_learning_roadmap.ipynb](notebooks/00_learning_roadmap.ipynb) | 전체 01~04 학습 흐름과 각 단계의 역할을 소개합니다. | 모델 연결부터 Agent 협업까지의 선후 관계를 설명할 수 있습니다. |
-| [01_environment.ipynb](notebooks/01_environment.ipynb) | 설정 누락 여부를 점검하고, 실행 가능한 AI Core deployment를 조회합니다. | 비밀값 없이 인증 준비 상태와 RUNNING deployment 상태를 확인합니다. |
+| [01_environment.ipynb](notebooks/01_environment.ipynb) | 카드형 설정 UI에서 연결 정보를 점검하고, 필요할 때만 로컬 `.env`에 저장한 뒤 실행 가능한 AI Core deployment를 조회합니다. | client secret을 다시 표시하지 않고 인증 준비 상태와 RUNNING deployment 상태를 확인합니다. |
 | [02_openai_compatible_chat.ipynb](notebooks/02_openai_compatible_chat.ipynb) | AI Core의 LLM을 OpenAI-compatible 방식으로 호출합니다. | 모델명·입력 메시지·응답의 관계를 확인하고 기본 채팅 호출을 성공시킵니다. |
 
-노트북은 위 순서대로 실행하세요. 환경 상태가 준비되지 않은 경우에는 호출을 계속 진행하기보다 설정을 먼저 보완합니다.
+노트북은 위 순서대로 실행하세요. 설정 UI에서 빈 값은 기존 `.env` 값을 유지하며, client secret은 화면에 재표시하지 않습니다. 환경 상태가 준비되지 않은 경우에는 호출을 계속 진행하기보다 설정을 먼저 보완합니다.
 
 </details>
 
