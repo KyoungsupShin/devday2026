@@ -35,3 +35,6 @@ results/
 # === OS/에디터 ===
 .DS_Store
 **/.DS_Store
+
+
+*.mp4
