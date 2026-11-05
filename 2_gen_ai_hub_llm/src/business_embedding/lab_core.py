@@ -10,8 +10,8 @@ from typing import Callable, Iterable, Sequence
 
 import numpy as np
 
-from lab_common.ai_core import apply_ai_core_environment
-from lab_common.config import Settings
+from .lesson_support.ai_core import apply_ai_core_environment
+from .lesson_support.config import Settings
 
 
 @dataclass(frozen=True)

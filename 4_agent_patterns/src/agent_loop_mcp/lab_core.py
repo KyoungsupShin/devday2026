@@ -7,8 +7,8 @@ from copy import deepcopy
 from queue import Empty, Queue
 from typing import Any
 
-from lab_common.config import Settings, load_settings
-from lab_common.models import TraceEvent
+from .lesson_support.config import Settings, load_settings
+from .lesson_support.models import TraceEvent
 
 from .agents.registry import FOOD_AGENT_BY_ID, SYNTHESIS_AGENT_ID
 from .context import (

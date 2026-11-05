@@ -5,12 +5,12 @@ import re
 from collections.abc import Mapping
 from typing import Any, Callable
 
-from lab_common.ai_core import (
+from .lesson_support.ai_core import (
     apply_ai_core_environment,
     llm_model_params,
     orchestration_url,
 )
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 
 
 _REGISTRY_CONFIG_PATH = "/registry/v2/orchestrationConfigs"

@@ -11,9 +11,9 @@ from typing import Any
 from uuid import uuid4
 
 from a2a.types import AgentCard
-from lab_common.llm import chat_text
-from lab_common.config import Settings, load_settings
-from src.agent_clients import chat_tool_completion
+from .lesson_support.llm import chat_text
+from .lesson_support.config import Settings, load_settings
+from src.agent_to_agent_advanced.agent_client import chat_tool_completion
 
 from .catalog import (
     AGENT_CATALOG,
@@ -47,6 +47,7 @@ from .transport import (
 
 MAX_CONVERSATION_MESSAGES = 6
 MAX_CONVERSATION_CHARS = 6_000
+REQUEST_MODES = frozenset({"inform", "review", "draft", "action"})
 
 
 def _normalize_conversation_history(
@@ -127,6 +128,14 @@ def _parse_decision(raw: str) -> dict[str, Any]:
             "Orchestration Agent는 action, target_agent_id, reason 문자열을 반환해야 합니다."
         )
     result = {field: decision[field].strip() for field in required_fields}
+    request_mode = decision.get("request_mode", "review")
+    if not isinstance(request_mode, str) or request_mode.strip() not in REQUEST_MODES:
+        raise RuntimeError(
+            "Orchestration Agent의 request_mode는 inform, review, draft, action 중 하나여야 합니다."
+        )
+    # Older saved/test decisions did not carry an intent classification.  Treat
+    # them conservatively: an unclassified request never unlocks a mail draft.
+    result["request_mode"] = request_mode.strip()
     if result["action"] not in {"delegate", "handoff", "complete"}:
         raise RuntimeError(
             "Orchestration Agent의 action은 delegate, handoff, complete 중 하나여야 합니다."
@@ -334,6 +343,75 @@ def _retry_human_approval_summary(
     return {**draft, "display_summary_error": True}
 
 
+def _request_human_approval_if_explicit(
+    settings: Settings,
+    *,
+    request: str,
+    decision: dict[str, Any],
+    artifacts: list[dict[str, Any]],
+    grounding: dict[str, Any],
+    conversation_history: list[dict[str, Any]] | None,
+    on_human_approval: Callable[[dict[str, Any]], None] | None,
+) -> None:
+    """Offer the draft-only tool only after an LLM classifies explicit intent.
+
+    ``inform`` and ``review`` requests never see the approval Tool.  This is a
+    capability boundary, not a department-routing rule: the model has already
+    selected its Team(s) from the record before this optional follow-up.
+    """
+    if (
+        decision.get("request_mode") not in {"draft", "action"}
+        or decision.get("action") != "complete"
+    ):
+        return
+    prompt = render_prompt(
+        "orchestration.human_approval_decision_user",
+        request=request,
+        decision=json.dumps(decision, ensure_ascii=False),
+        artifacts=json.dumps(artifacts, ensure_ascii=False),
+        grounding=json.dumps(grounding, ensure_ascii=False),
+        conversation_history=json.dumps(
+            _normalize_conversation_history(conversation_history), ensure_ascii=False
+        ),
+    )
+    response = chat_tool_completion(
+        settings,
+        [
+            {
+                "role": "system",
+                "content": get_prompt("orchestration.decision_system"),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        [human_approval_tool()],
+    )
+    calls = _tool_calls(response)
+    if not calls:
+        return
+    # This narrow second turn has exactly one capability.  Reject multiple or
+    # unexpected calls instead of silently turning an explanatory conversation
+    # into a different external workflow.
+    if len(calls) != 1:
+        raise RuntimeError("Human approval 단계에는 하나의 검토 초안만 요청할 수 있습니다.")
+    function = _field(calls[0], "function")
+    if _field(function, "name") != HUMAN_APPROVAL_TOOL_NAME:
+        raise RuntimeError("Human approval 단계가 허용되지 않은 Tool을 선택했습니다.")
+    raw_arguments = _field(function, "arguments", "{}")
+    try:
+        arguments = (
+            json.loads(raw_arguments) if isinstance(raw_arguments, str) else raw_arguments
+        )
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Human approval Tool arguments가 유효한 JSON이 아닙니다.") from error
+    if not isinstance(arguments, dict):
+        raise TypeError("Human approval Tool arguments는 JSON 객체여야 합니다.")
+    draft = _retry_human_approval_summary(
+        settings, create_human_approval_draft(arguments)
+    )
+    if on_human_approval:
+        on_human_approval({"type": "human_approval_requested", "draft": draft})
+
+
 def _orchestration_observation(
     settings: Settings,
     request: str,
@@ -402,14 +480,27 @@ def _orchestrator_turn(
         },
         {"role": "user", "content": prompt},
     ]
-    orchestration_tools = [manual_search_tool(), human_approval_tool()]
+    # A human-review draft is deliberately absent from the first decision.  The
+    # first turn establishes the request mode and evidence record; otherwise an
+    # explanatory answer can become a self-justifying approval request.
+    orchestration_tools = [manual_search_tool()]
     response = chat_tool_completion(settings, messages, orchestration_tools)
     calls = _tool_calls(response)
     if not calls:
         raw = str(_field(_response_message(response), "content", "") or "")
-        return _retry_decision_display_fields(
+        decision = _retry_decision_display_fields(
             settings, messages, raw, orchestration_tools
-        ), grounding_context
+        )
+        _request_human_approval_if_explicit(
+            settings,
+            request=request,
+            decision=decision,
+            artifacts=artifacts,
+            grounding=grounding_context,
+            conversation_history=conversation_history,
+            on_human_approval=on_human_approval,
+        )
+        return decision, grounding_context
 
     assistant_calls: list[dict[str, Any]] = []
     tool_messages: list[dict[str, str]] = []
@@ -454,16 +545,6 @@ def _orchestrator_turn(
                     }
                 )
             tool_result: dict[str, Any] = observation
-        elif name == HUMAN_APPROVAL_TOOL_NAME:
-            try:
-                tool_result = create_human_approval_draft(arguments)
-            except ValueError as error:
-                raise RuntimeError(str(error)) from error
-            tool_result = _retry_human_approval_summary(settings, tool_result)
-            if on_human_approval:
-                on_human_approval(
-                    {"type": "human_approval_requested", "draft": tool_result}
-                )
         else:
             raise RuntimeError(
                 "Orchestration Agent가 허용되지 않은 Tool을 선택했습니다."
@@ -502,9 +583,19 @@ def _orchestrator_turn(
         tool_choice="none",
     )
     final_content = str(_field(_response_message(final_response), "content", "") or "")
-    return _retry_decision_display_fields(
+    decision = _retry_decision_display_fields(
         settings, messages, final_content, orchestration_tools
-    ), grounding_context
+    )
+    _request_human_approval_if_explicit(
+        settings,
+        request=request,
+        decision=decision,
+        artifacts=artifacts,
+        grounding=grounding_context,
+        conversation_history=conversation_history,
+        on_human_approval=on_human_approval,
+    )
+    return decision, grounding_context
 
 
 def _orchestrator_decision(
@@ -755,45 +846,6 @@ def run_handoff(
             conversation_history,
         )
     )
-
-
-def plan_handoff(
-    request: str = DEFAULT_REQUEST,
-    settings: Settings | None = None,
-    agent_urls: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Start a fresh A2A session and return its first Task Plan only.
-
-    Agent Cards are discovered and the Orchestrator performs its Observe and Decide
-    phases. No Team Task, external write, or approval submission is executed.
-    """
-    if not isinstance(request, str) or not request.strip():
-        raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
-    clean_request = request.strip()
-    resolved_settings = settings or load_settings()
-    cards = run_sync(discover_cards(resolve_agent_urls(agent_urls)))
-    grounding = no_grounding_requested()
-    observation = _orchestration_observation(
-        resolved_settings, clean_request, [], cards, grounding
-    )
-    decision, grounding = _orchestrator_turn(
-        resolved_settings,
-        clean_request,
-        [],
-        cards,
-        grounding,
-        observation=observation,
-    )
-    return {
-        "request": clean_request,
-        "observation": observation,
-        "decision": decision,
-        "grounding": grounding,
-        "execution_boundary": (
-            "fresh A2A Agent Card discovery and initial Orchestrator Task Plan only; "
-            "no Team Task, approval submission, or external write is executed."
-        ),
-    }
 
 
 def run_handoff_stream(

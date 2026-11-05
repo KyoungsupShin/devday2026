@@ -6,9 +6,9 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import Any
 
-from lab_common.llm import chat_text
-from lab_common.config import Settings, load_settings
-from lab_common.models import TraceEvent
+from .lesson_support.llm import chat_text
+from .lesson_support.config import Settings, load_settings
+from .lesson_support.models import TraceEvent
 
 from .agents.registry import FOOD_AGENT_BY_ID
 from .food_agents import plan_work_agents, run_food_agent

@@ -5,8 +5,8 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from lab_common.llm import chat_text, chat_text_stream
-from lab_common.config import Settings, load_settings
+from .lesson_support.llm import chat_text, chat_text_stream
+from .lesson_support.config import Settings, load_settings
 
 from .agents.registry import EXECUTABLE_AGENT_IDS, FOOD_AGENT_BY_ID, FOOD_AGENT_DEFINITIONS
 

@@ -10,13 +10,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from lab_common.ai_core import (
+from .lesson_support.ai_core import (
     apply_ai_core_environment,
     llm_model_params,
     orchestration_url,
 )
-from lab_common.config import Settings
-from lab_common.grounding_repository import list_documents
+from .lesson_support.config import Settings
+from .lesson_support.grounding_repository import list_documents
 
 try:
     from gen_ai_hub.orchestration_v2.models.config import (
@@ -193,12 +193,49 @@ def _validated_runtime_overlay(value: str | None) -> str:
     return overlay
 
 
-def _grounded_answer(
+def _model_data(value: Any) -> Any:
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump()
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return value
+
+
+def _grounding_source_document_ids(response: Any, available_document_ids: list[str]) -> list[str]:
+    """Return only logical IDs present in the Grounding response metadata."""
+    found: list[str] = []
+
+    def visit(value: Any) -> None:
+        value = _model_data(value)
+        if isinstance(value, str):
+            for identifier in available_document_ids:
+                if identifier and identifier in value and identifier not in found:
+                    found.append(identifier)
+        elif isinstance(value, dict):
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    intermediate = getattr(response, "intermediate_results", None)
+    grounding = getattr(intermediate, "grounding", None)
+    visit(getattr(grounding, "data", None))
+    visit(getattr(grounding, "message", None))
+    visit(getattr(getattr(response, "final_result", None), "citations", None))
+    return found
+
+
+def _grounded_answer_with_sources(
     request: str,
     settings: Settings,
     repository_id: str,
+    available_document_ids: list[str],
     runtime_overlay: str = "",
-) -> str:
+) -> tuple[str, list[str]]:
     """Ask the SAP BTP Grounding pipeline for evidence, not a workflow decision."""
     sdk = _sdk()
     apply_ai_core_environment(settings)
@@ -214,6 +251,7 @@ def _grounded_answer(
             placeholders=sdk["DocumentGroundingPlaceholders"](
                 input=["user_query"], output="grounding_response"
             ),
+            metadata_params=["id"],
         )
     )
     overlay_note = (
@@ -256,7 +294,18 @@ def _grounded_answer(
         api_url=orchestration_url(settings), config=config
     )
     response = service.run(placeholder_values={"user_query": request})
-    return str(response.final_result.choices[0].message.content or "").strip()
+    answer = str(response.final_result.choices[0].message.content or "").strip()
+    return answer, _grounding_source_document_ids(response, available_document_ids)
+
+
+def _grounded_answer(
+    request: str, settings: Settings, repository_id: str, runtime_overlay: str = ""
+) -> str:
+    """Compatibility wrapper for callers that require evidence text only."""
+    answer, _ = _grounded_answer_with_sources(
+        request, settings, repository_id, [], runtime_overlay
+    )
+    return answer
 
 
 def collect_grounding_context(
@@ -298,11 +347,14 @@ def collect_grounding_context(
             "evidence": "",
         }
 
-    evidence = _grounded_answer(cleaned_request, settings, repository, overlay)
+    evidence, source_document_ids = _grounded_answer_with_sources(
+        cleaned_request, settings, repository, document_ids, overlay
+    )
     result = {
         "state": "grounded" if evidence else "no_result",
         "repository_id": repository,
-        "document_ids": document_ids,
+        "document_ids": source_document_ids,
+        "available_document_count": len(document_ids),
         "evidence": evidence,
         "runtime_overlay_applied": bool(overlay),
     }
@@ -312,10 +364,14 @@ def collect_grounding_context(
 def grounding_audit(context: dict[str, Any]) -> dict[str, Any]:
     """Return safe, compact grounding metadata for events and middleware logs."""
     document_ids = context.get("document_ids", [])
+    available_document_count = context.get("available_document_count")
     return {
         "state": context.get("state"),
         "repository_id": context.get("repository_id"),
-        "document_count": len(document_ids) if isinstance(document_ids, list) else 0,
+        "document_count": (
+            available_document_count if isinstance(available_document_count, int)
+            else len(document_ids) if isinstance(document_ids, list) else 0
+        ),
         "document_ids": document_ids if isinstance(document_ids, list) else [],
         "runtime_overlay_applied": bool(context.get("runtime_overlay_applied")),
     }

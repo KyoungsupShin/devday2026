@@ -11,7 +11,7 @@ from a2a.server.routes import (
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
 from fastapi import FastAPI
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 
 from .catalog import (
     AGENT_CATALOG,

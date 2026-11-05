@@ -13,10 +13,10 @@ from typing import Any, Callable, Literal
 
 import requests
 
-from lab_common.ai_core import api_headers, list_running_deployments
-from lab_common.config import Settings
-from lab_common.llm import chat_text
-from lab_common.models import Candidate, RankedCandidate
+from .lesson_support.ai_core import api_headers, list_running_deployments
+from .lesson_support.config import Settings
+from .lesson_support.llm import chat_text
+from .lesson_support.models import Candidate, RankedCandidate
 
 Strategy = Literal["v1", "v2", "v3"]
 DEFAULT_STRATEGY: Strategy = "v3"
@@ -250,12 +250,6 @@ def build_rerank_payload(query: str, candidates: list[Candidate], model: str) ->
 
 def _rank(query: str, candidates: list[Candidate], settings: Settings) -> tuple[list[RankedCandidate], str]:
     body = build_rerank_payload(query, candidates, settings.rerank_model)
-    if settings.rerank_endpoint:
-        headers = {"Content-Type": "application/json"}
-        if settings.rerank_api_key:
-            headers["Authorization"] = f"Bearer {settings.rerank_api_key}"
-        response = requests.post(settings.rerank_endpoint, headers=headers, json=body, timeout=15)
-        return _rank_response(response, candidates), "cohere_rerank_litellm"
     url, model = _deployment(settings)
     body["model"] = model
     response = requests.post(f"{url}/rerank", headers=api_headers(settings), json=body, timeout=30)

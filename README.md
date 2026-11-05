@@ -23,7 +23,6 @@ SAP BTP AI Core와 Gen AI Hub의 LLM, Grounding, Agent 협업을 실습하는 �
 협업 결과와 개선 제안을 확인합니다.
 
 ---
-
 <details>
 <summary><strong>🧭 학습 흐름</strong></summary>
 
@@ -32,7 +31,7 @@ SAP BTP AI Core와 Gen AI Hub의 LLM, Grounding, Agent 협업을 실습하는 �
 
 | 순서 | 아젠다 | 핵심 실습 | 완료 기준 |
 | --- | --- | --- | --- |
-| **01** | [Gen AI Hub와 BTP AI Core](1_gen_ai_hub/) | AI Core 인증, deployment 조회, OpenAI-compatible 호출 | 비밀값 노출 없이 환경과 실행 중인 모델을 확인한다. |
+| **01** | [Gen AI Hub와 BTP AI Core](1_gen_ai_hub/) | AI Core 인증, deployment 조회 | 비밀값 노출 없이 환경과 실행 중인 모델을 확인한다. |
 | **02** | [Gen AI Hub LLM](2_gen_ai_hub_llm/) | Prompt, embedding, reranking, 비즈니스 임베딩 | 모델 응답·유사도·추천 score를 근거와 함께 해석한다. |
 | **03** | [Gen AI Hub Services](3_gen_ai_hub_services/) | Orchestration, masking, document grounding, Object Storage | 서비스 응답과 grounding 문서 근거를 구분해 확인한다. |
 | **04** | [Agent Patterns](4_agent_patterns/) | Workflow, tool calling, A2A, Advanced A2A | 제어 흐름·도구 권한·조직 경계에 맞는 협업 방식을 비교한다. |
@@ -42,7 +41,6 @@ SAP BTP AI Core와 Gen AI Hub의 LLM, Grounding, Agent 협업을 실습하는 �
 </details>
 
 ---
-
 <details>
 <summary><strong>🚀 시작하기</strong></summary>
 
@@ -106,23 +104,11 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | --- | --- | --- |
 | `00_learning_roadmap.ipynb` | 전체 학습 흐름과 사전 준비 | 01~04 단계의 연결 관계를 이해한다. |
 | `01_environment.ipynb` | 설정 누락과 RUNNING deployment 확인 | 비밀값 없이 인증·모델 상태를 점검한다. |
-| `02_openai_compatible_chat.ipynb` | AI Core LLM 채팅 호출 | OpenAI-compatible 호출 결과를 확인한다. |
 
 ```bash
 .venv/bin/python 1_gen_ai_hub/main.py status
 .venv/bin/python 1_gen_ai_hub/main.py deployments
 ```
-
-<details>
-<summary>선택 실습: LiteLLM Proxy</summary>
-
-`LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL`을 `.env`에 설정하면 OpenAI SDK 형식의 endpoint도 확인할 수 있습니다.
-
-```bash
-.venv/bin/python 1_gen_ai_hub/main.py litellm-status
-```
-
-</details>
 
 </details>
 
@@ -139,7 +125,7 @@ Windows PowerShell에서는 `.venv/bin/python` 대신 `.\.venv\Scripts\python.ex
 | `03_embedding_advanced.ipynb` | 비즈니스 문의 clustering | 라벨 기반 domain adapter 결과를 확인한다. |
 | `04_reranker_decision_model.ipynb` | 정책 후보 reranking | 낮은 score 또는 작은 margin은 사람 검토로 보낸다. |
 
-필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. 외부 reranker 또는 Harness decision model은 `RERANK_ENDPOINT`, `RERANK_API_KEY`로 연결할 수 있습니다. score와 margin은 자동 승인·반려가 아닌 사람 검토 우선순위를 정하는 근거로만 사용합니다.
+필요한 경우 `.env`에 `EMBED_MODEL`과 `RERANK_MODEL`을 설정합니다. score와 margin은 자동 승인·반려가 아닌 사람 검토 우선순위를 정하는 근거로만 사용합니다.
 
 </details>
 
@@ -203,11 +189,10 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 
 | 기능 | 추가 환경변수 | 사용 단계 |
 | --- | --- | --- |
-| 임베딩·reranker | `EMBED_MODEL`, `RERANK_MODEL` 또는 `RERANK_ENDPOINT`, `RERANK_API_KEY` | 02, 04 |
+| 임베딩·reranker | `EMBED_MODEL`, `RERANK_MODEL` | 02, 04 |
 | SAP RPT | `RPT_MODEL`, 선택적으로 `AICORE_RPT_DEPLOYMENT_ID` | 03 |
 | Grounding | `GROUNDING_REPOSITORY_ID`, 선택적으로 `AICORE_ORCHESTRATION_DEPLOYMENT_URL` | 03, 04 |
 | Object Storage | `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`, `OBJECT_STORAGE_BUCKET` | 03 |
-| LiteLLM Proxy | `LITELLM_BASE_URL`, `LITELLM_API_KEY`, `LITELLM_MODEL` | 01 (선택) |
 | Outlook 발송 | `ALLOW_WRITE_TOOLS=true` 및 연동 설정 | 04 (선택) |
 
 - service key, API key, access key는 노트북 출력·로그·Git에 남기지 않습니다.
@@ -219,16 +204,3 @@ Grounding에는 `GROUNDING_REPOSITORY_ID`가 필요합니다. Object Storage 연
 </details>
 
 ---
-
-<details>
-<summary><strong>✅ 검증</strong></summary>
-
-
-```bash
-.venv/bin/python -m unittest discover -s 1_gen_ai_hub/tests -v
-.venv/bin/python -m unittest discover -s 2_gen_ai_hub_llm/tests -v
-.venv/bin/python -m unittest discover -s 3_gen_ai_hub_services/tests -v
-.venv/bin/python -m unittest discover -s 4_agent_patterns/tests -v
-```
-
-</details>

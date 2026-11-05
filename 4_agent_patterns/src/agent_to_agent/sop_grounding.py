@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from lab_common.config import Settings, load_settings
-from lab_common.grounding_repository import (
+from .lesson_support.config import Settings, load_settings
+from .lesson_support.grounding_repository import (
     delete_document,
     list_documents,
     upload_text_document,
@@ -19,7 +19,7 @@ _PROCESS_HEADING = "## 프로세스"
 _STAKEHOLDER_HEADING = "\n## Stakeholder와 책임"
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SOP_SOURCE_PATH = (
-    PROJECT_ROOT / "data" / "context" / "interdepartmental_collaboration_sop.md"
+    PROJECT_ROOT / "data" / "context" / "collaboration_sop.md"
 )
 
 

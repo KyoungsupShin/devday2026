@@ -1,0 +1,24 @@
+# Post-evaluation teardown — optional.
+# This file runs after the numbered test cases. Use it to restore environment
+# state — delete test records, reset flags, or confirm the environment is clean.
+# Steps here carry no validation blocks — only trace metrics are collected.
+#
+# Limitation: teardown cannot undo irreversible actions (emails sent, payments
+# processed) and may race asynchronous workflows. Use only for cleanup that is
+# locally scoped and reversible.
+#
+# To activate: replace test_steps: [] with your scenario steps.
+# Not needed: leave test_steps: [] — this file is skipped automatically.
+#             Or delete this file entirely.
+#
+# Step format:
+# test_steps:
+#   - type: dynamic_conversation
+#     user_agent:
+#       task_summary: |
+#         Describe what the agent should do to restore the environment.
+#     max_turns: 5
+
+id: zzz_post_teardown
+description: Post-evaluation environment teardown
+test_steps: []

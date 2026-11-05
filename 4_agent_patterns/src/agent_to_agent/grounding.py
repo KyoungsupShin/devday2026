@@ -10,13 +10,13 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from lab_common.ai_core import (
+from .lesson_support.ai_core import (
     apply_ai_core_environment,
     llm_model_params,
     orchestration_url,
 )
-from lab_common.config import Settings
-from lab_common.grounding_repository import list_documents
+from .lesson_support.config import Settings
+from .lesson_support.grounding_repository import list_documents
 
 try:
     from gen_ai_hub.orchestration_v2.models.config import (
@@ -168,18 +168,72 @@ def _sdk() -> dict[str, Any]:
 
 
 def _document_id(document: dict[str, Any]) -> str:
-    value = document.get("id") or document.get("documentId")
-    if value:
-        return str(value)
+    """Return the human-readable logical ID, preferring the source filename."""
     for item in document.get("metadata", []):
         if isinstance(item, dict) and item.get("key") == "id":
             values = item.get("value", [])
             if isinstance(values, list) and values:
                 return str(values[0])
+    value = document.get("id") or document.get("documentId")
+    if value:
+        return str(value)
     return ""
 
 
-def _grounded_answer(request: str, settings: Settings, repository_id: str) -> str:
+def _model_data(value: Any) -> Any:
+    """Convert an SDK response fragment to ordinary nested Python values."""
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        return model_dump()
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return value
+
+
+def _grounding_source_document_ids(
+    response: Any, available_document_ids: list[str]
+) -> list[str]:
+    """Extract only filenames returned by the Grounding module as evidence.
+
+    The repository list is deliberately not used as a proxy for retrieval: it can
+    contain many documents that did not contribute to this answer.  Grounding
+    response payloads vary slightly by SDK/service version, so inspect their
+    nested metadata generically and retain only known logical document IDs.
+    """
+    found: list[str] = []
+
+    def visit(value: Any) -> None:
+        value = _model_data(value)
+        if isinstance(value, str):
+            for identifier in available_document_ids:
+                if identifier and identifier in value and identifier not in found:
+                    found.append(identifier)
+            return
+        if isinstance(value, dict):
+            for child in value.values():
+                visit(child)
+            return
+        if isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    intermediate = getattr(response, "intermediate_results", None)
+    grounding = getattr(intermediate, "grounding", None)
+    visit(getattr(grounding, "data", None))
+    visit(getattr(grounding, "message", None))
+    final_result = getattr(response, "final_result", None)
+    visit(getattr(final_result, "citations", None))
+    return found
+
+
+def _grounded_answer_with_sources(
+    request: str,
+    settings: Settings,
+    repository_id: str,
+    available_document_ids: list[str],
+) -> tuple[str, list[str]]:
     """Ask the SAP BTP Grounding pipeline for evidence, not a workflow decision."""
     sdk = _sdk()
     apply_ai_core_environment(settings)
@@ -195,6 +249,9 @@ def _grounded_answer(request: str, settings: Settings, repository_id: str) -> st
             placeholders=sdk["DocumentGroundingPlaceholders"](
                 input=["user_query"], output="grounding_response"
             ),
+            # Return the logical source ID with each retrieved chunk so the UI
+            # can distinguish documents actually used from all repository files.
+            metadata_params=["id"],
         )
     )
     prompt = sdk["PromptTemplatingModuleConfig"](
@@ -228,7 +285,14 @@ def _grounded_answer(request: str, settings: Settings, repository_id: str) -> st
         api_url=orchestration_url(settings), config=config
     )
     response = service.run(placeholder_values={"user_query": request})
-    return str(response.final_result.choices[0].message.content or "").strip()
+    answer = str(response.final_result.choices[0].message.content or "").strip()
+    return answer, _grounding_source_document_ids(response, available_document_ids)
+
+
+def _grounded_answer(request: str, settings: Settings, repository_id: str) -> str:
+    """Compatibility wrapper for callers that only need the evidence text."""
+    answer, _ = _grounded_answer_with_sources(request, settings, repository_id, [])
+    return answer
 
 
 def collect_grounding_context(
@@ -268,11 +332,14 @@ def collect_grounding_context(
             "evidence": "",
         }
 
-    evidence = _grounded_answer(cleaned_request, settings, repository)
+    evidence, source_document_ids = _grounded_answer_with_sources(
+        cleaned_request, settings, repository, document_ids
+    )
     result = {
         "state": "grounded" if evidence else "no_result",
         "repository_id": repository,
-        "document_ids": document_ids,
+        "document_ids": source_document_ids,
+        "available_document_count": len(document_ids),
         "evidence": evidence,
     }
     return result
@@ -281,9 +348,16 @@ def collect_grounding_context(
 def grounding_audit(context: dict[str, Any]) -> dict[str, Any]:
     """Return safe, compact grounding metadata for events and middleware logs."""
     document_ids = context.get("document_ids", [])
+    available_document_count = context.get("available_document_count")
     return {
         "state": context.get("state"),
         "repository_id": context.get("repository_id"),
-        "document_count": len(document_ids) if isinstance(document_ids, list) else 0,
+        "document_count": (
+            available_document_count
+            if isinstance(available_document_count, int)
+            else len(document_ids)
+            if isinstance(document_ids, list)
+            else 0
+        ),
         "document_ids": document_ids if isinstance(document_ids, list) else [],
     }

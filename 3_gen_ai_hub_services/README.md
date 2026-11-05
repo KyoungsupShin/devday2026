@@ -31,11 +31,13 @@ Grounding에는 문서 저장소가 필요합니다.
 | [01_orchestration.ipynb](notebooks/01_orchestration.ipynb) | 등록된 Orchestration을 조회·호출하고 prompt templating, 콘텐츠 필터, 데이터 마스킹을 살펴봅니다. | 어떤 서비스가 호출되었는지와 입력 보호 기능이 적용되는 위치를 확인합니다. |
 | [02_grounding.ipynb](notebooks/02_grounding.ipynb) | 인덱싱된 문서 chunk를 근거로 질의하고, 답변의 참조 근거를 확인합니다. | 생성된 답변과 실제로 참조한 chunk를 분리해 검토합니다. |
 | [03_rpt_risk_classification.ipynb](notebooks/03_rpt_risk_classification.ipynb) | ID를 제거한 교육용 신용위험 표 데이터를 SAP RPT로 80/20 holdout 평가하고 한 건을 분류합니다. | RPT 요청에 전달되는 feature·label, 성능 지표, 감사용 집계를 분리해 검토합니다. |
+| [04_rpt_decision.ipynb](notebooks/04_rpt_decision.ipynb) | SAP RPT Decision API로 고객 문의의 담당 경로·의도·감정 상태·처리 방식·우선순위를 함께 결정합니다. | `SAP_RPT_API_KEY`를 사용한 읽기 전용 API 호출과 결정 근거를 검토합니다. |
 
 Orchestration, Grounding, RPT 순으로 실행하세요. RPT는 읽기 전용 예측을 사용합니다.
 
 ```bash
 .venv/bin/python main.py rpt-evaluate
+.venv/bin/python main.py rpt-decision "카드에 중복 청구되었습니다. 오늘 확인해 주세요."
 ```
 
 `RPT_MODEL`은 기본값 `sap-rpt-1.5-large`를 사용하며, 반복 가능한 대상이 필요하면 `AICORE_RPT_DEPLOYMENT_ID`로 RUNNING deployment 하나를 고정합니다.

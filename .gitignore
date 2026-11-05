@@ -28,9 +28,33 @@ results/
 !3_gen_ai_hub_services/results/rpt_risk/README.md
 
 # === 로컬 확장 실습 (Git 미반영) ===
-/5_harness/
+/5_harness/*
+!/5_harness/src/
+/5_harness/src/*
+!/5_harness/src/self_evolving_proactive_harness_agent/
+!/5_harness/src/self_evolving_proactive_harness_agent/**
+/5_harness/src/self_evolving_proactive_harness_agent/**/data/
+!/5_harness/src/self_evolving_proactive_harness_agent/data/
+!/5_harness/src/self_evolving_proactive_harness_agent/data/SAP_3PL_EAI_OUTBOUND_DELIVERY.csv
+!/5_harness/src/self_evolving_proactive_harness_agent/data/mock_3pl_delivery_operations.csv
+!/5_harness/src/self_evolving_proactive_harness_agent/data/mock_3pl_delivery_operations.metadata.json
+!/5_harness/src/self_evolving_proactive_harness_agent/data/mock_3pl_fulfillment_routing.csv
+!/5_harness/src/self_evolving_proactive_harness_agent/data/mock_3pl_fulfillment_routing.metadata.json
+/5_harness/src/self_evolving_proactive_harness_agent/**/__pycache__/
+/5_harness/src/self_evolving_proactive_harness_agent/**/*.pyc
+!/5_harness/tests/
+/5_harness/tests/*
+!/5_harness/tests/test_self_evolving_proactive_harness_agent.py
+!/5_harness/notebooks/
+/5_harness/notebooks/*
+!/5_harness/notebooks/02_Self_evlov_proactive_harness_agent.ipynb
+!/5_harness/assets/
+/5_harness/assets/*
+!/5_harness/assets/diagrams/
+!/5_harness/assets/diagrams/self_evolving_proactive_harness_agent.svg
 /6_Business_issue/
 /7_Business_Operation_Harness/
+/8_Joule_Base/
 
 # === OS/에디터 ===
 .DS_Store

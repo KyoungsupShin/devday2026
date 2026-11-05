@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="920" viewBox="0 0 1200 920">
+  <rect width="1200" height="920" fill="#ffffff"/>
+  <image href="harness_metric_flow.svg" x="0" y="0" width="1200" height="390" preserveAspectRatio="xMidYMid meet"/>
+  <rect x="40" y="410" width="1120" height="92" rx="8" fill="#e8f0fe" stroke="#1a73e8" stroke-width="2"/>
+  <text x="68" y="444" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1a73e8">✓ CHECKPOINT · 권장 benchmark 단위</text>
+  <text x="68" y="475" font-family="Arial, sans-serif" font-size="16" fill="#202124">각 task에 expected_outcome, allowed_tools, constraints, variant_group, trace_id를 함께 저장합니다.</text>
+  <image href="harness_comparison_flow.svg" x="0" y="515" width="1200" height="390" preserveAspectRatio="xMidYMid meet"/>
+</svg>

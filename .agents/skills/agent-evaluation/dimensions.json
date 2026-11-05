@@ -1,0 +1,131 @@
+{
+  "_comment": "Dimension registry for the agent-evaluation skill. The tag/category sets mirror validateschema.py's former inline constants exactly, so loading this file is behavior-neutral for the structural validator. The 'gates' decide which dimensions the generator may emit: enabled = aicore_supported AND (requires_ground_truth ? grounding_present : true) AND applies_when. Enforced deterministically by `validateschema.py --enabled <enabled-dimensions.json>`, which gates on the id Category token (not the bare tag) so BusinessOutcome gates off independently of Correctness. See services/agent-evaluation/docs/dev/EVAL_GENERATION_REFRAME_IDEAS.md. applies_when is resolved by the generator from the agent architecture / source / grounding declaration; the validator only enforces the resolved enabled set.",
+  "dimensions": [
+    {
+      "key": "correctness",
+      "tag": "correctness",
+      "category": "Correctness",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "goal completion + tool reachability. OOTB asserts liveness/reachability; the grounding branch flips assertion STYLE to value-correctness within the same Category."
+    },
+    {
+      "key": "business_outcome",
+      "tag": "correctness",
+      "category": "BusinessOutcome",
+      "aicore_supported": true,
+      "requires_ground_truth": true,
+      "applies_when": "qualifying_metric_present",
+      "note": "needs a committed metric AND customer grounding. Off OOTB. Distinct Category token from Correctness so it gates independently despite sharing the correctness tag."
+    },
+    {
+      "key": "groundedness",
+      "tag": "groundedness",
+      "category": "Groundedness",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "groundedness-to-trace: the agent states nothing absent from its own tool outputs this session. No external ground truth. Formerly the 'hallucination' dimension — same concept, positive framing."
+    },
+    {
+      "key": "digression",
+      "tag": "digression",
+      "category": "Digression",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "off-topic / out-of-scope handling. Observable, no ground truth."
+    },
+    {
+      "key": "memory",
+      "tag": "memory",
+      "category": "Memory",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "agent_stateful",
+      "note": "retention reference is the user's own earlier turns (in task_summary), so no external ground truth. Review this gate value in step 2."
+    },
+    {
+      "key": "summarization",
+      "tag": "summarization",
+      "category": "Summarization",
+      "aicore_supported": true,
+      "requires_ground_truth": true,
+      "applies_when": "agent_summarizes",
+      "note": "faithfulness / omit-nothing is a quality judgment needing a reference answer. Review this gate value in step 2."
+    },
+    {
+      "key": "rag",
+      "tag": "rag",
+      "category": "Rag",
+      "aicore_supported": true,
+      "requires_ground_truth": true,
+      "applies_when": "agent_has_retrieval",
+      "note": "retrieval relevance needs knowing what is relevant -> ground truth."
+    },
+    {
+      "key": "operational_constraint",
+      "tag": "security",
+      "category": "Security",
+      "aicore_supported": true,
+      "requires_ground_truth": true,
+      "applies_when": "grounding_declares_forbidden_ops",
+      "note": "customer-declared forbidden operation (e.g. must not call delete). Validation is trace-observable (tool call absent/failed). Gated on customer DECLARATION, carried via the grounding branch. NOT the adversarial security below."
+    },
+    {
+      "key": "safety",
+      "tag": "safety",
+      "category": "Safety",
+      "aicore_supported": false,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "platform-owned: Joule scenario matching blocks unspecified behavior. Includes adversarial (jailbreak/prompt-injection/role-play). Off. Flip aicore_supported to re-enable if the platform stops owning it."
+    },
+    {
+      "key": "stability",
+      "tag": "stability",
+      "category": "Stability",
+      "aicore_supported": false,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "raise the run iteration count instead; not a generated test case."
+    },
+    {
+      "key": "performance",
+      "tag": "performance",
+      "category": "Performance",
+      "aicore_supported": false,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "platform concern; timings already recorded per run."
+    },
+    {
+      "key": "uiux",
+      "tag": "uiux",
+      "category": "Uiux",
+      "aicore_supported": false,
+      "requires_ground_truth": false,
+      "applies_when": "always",
+      "note": "platform / Joule."
+    },
+    {
+      "key": "orchestration",
+      "tag": "orchestration",
+      "category": "Orchestration",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "architecture_orchestrator",
+      "note": "always present on an orchestrator's tests."
+    },
+    {
+      "key": "routing_correctness",
+      "tag": "routing_correctness",
+      "category": "RoutingCorrectness",
+      "aicore_supported": true,
+      "requires_ground_truth": false,
+      "applies_when": "architecture_orchestrator",
+      "note": "orchestrator routes to the right sub-agent."
+    }
+  ]
+}

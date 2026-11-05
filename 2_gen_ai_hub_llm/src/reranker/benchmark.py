@@ -5,7 +5,7 @@ from statistics import median
 from time import perf_counter
 from typing import Any, Callable
 
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 from .lab_core import Strategy, run_decision_recommendation
 
 

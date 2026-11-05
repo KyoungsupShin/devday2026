@@ -6,7 +6,7 @@ from typing import Any
 
 import gradio as gr
 
-from lab_common.config import load_settings
+from .lesson_support.config import load_settings
 from .lab_core import (
     DEFAULT_INPUT_PLACEHOLDER,
     get_orchestration_config,

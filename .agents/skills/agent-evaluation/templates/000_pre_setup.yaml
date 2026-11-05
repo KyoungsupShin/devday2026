@@ -1,0 +1,20 @@
+# Pre-evaluation setup — optional.
+# This file runs before the numbered test cases. Use it to seed test data,
+# create required records, or verify that environment prerequisites exist.
+# Steps here carry no validation blocks — only trace metrics are collected.
+#
+# To activate: replace test_steps: [] with your scenario steps.
+# Not needed: leave test_steps: [] — this file is skipped automatically.
+#             Or delete this file entirely.
+#
+# Step format:
+# test_steps:
+#   - type: dynamic_conversation
+#     user_agent:
+#       task_summary: |
+#         Describe what the agent should do to prepare the environment.
+#     max_turns: 5
+
+id: 000_pre_setup
+description: Pre-evaluation environment setup
+test_steps: []

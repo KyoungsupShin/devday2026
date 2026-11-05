@@ -9,11 +9,25 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 from src.business_embedding.lab_core import embed_texts
 
 
 DEFAULT_EMBED_MODEL = "amazon--titan-embed-image"
+REFERENCE_UMAP_TEXTS = (
+    "결제 취소와 환불 절차를 안내합니다.",
+    "같은 주문이 두 번 결제된 경우를 처리합니다.",
+    "카드 결제 오류와 승인 실패를 확인합니다.",
+    "상품 배송 상태와 운송장을 조회합니다.",
+    "배송지와 수령인 정보를 변경합니다.",
+    "로그인, 비밀번호, 계정 접근 문제를 해결합니다.",
+    "주문 내역과 주문 번호를 확인합니다.",
+    "상품 교환과 반품 신청 방법을 안내합니다.",
+    "쿠폰과 할인 혜택을 사용합니다.",
+    "구독 서비스 해지와 요금제를 변경합니다.",
+    "개인 정보와 계정 설정을 변경합니다.",
+    "고객센터 문의 접수 방법을 안내합니다.",
+)
 
 
 def _selected_model(model: str | None) -> str:
@@ -121,6 +135,48 @@ def _umap_coordinates(matrix: np.ndarray) -> np.ndarray:
     return coordinates
 
 
+def _reference_umap_coordinates(
+    reference_matrix: np.ndarray, entry_matrix: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit UMAP on fixed references and project session entries into that map."""
+    if len(reference_matrix) < 3:
+        raise ValueError("고정 UMAP 기준 문장이 세 개 이상 필요합니다.")
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", ImportWarning)
+            from umap import UMAP
+    except ImportError as error:
+        raise RuntimeError(
+            "UMAP이 없습니다. python3 -m pip install -r requirements.txt 를 실행하세요."
+        ) from error
+
+    reducer = UMAP(
+        n_components=2,
+        n_neighbors=min(15, len(reference_matrix) - 1),
+        min_dist=0.15,
+        metric="cosine",
+        init="random",
+        random_state=42,
+        n_jobs=1,
+    )
+    reference_coordinates = np.asarray(
+        reducer.fit_transform(_l2_normalize(reference_matrix)), dtype=np.float64
+    )
+    normalized_entries = _l2_normalize(entry_matrix)
+    # Transform entries separately: UMAP's batched transform can let a newly
+    # added point perturb the optimization of preceding points.
+    entry_coordinates = np.vstack(
+        [reducer.transform(vector[None, :]) for vector in normalized_entries]
+    ).astype(np.float64)
+    if (
+        entry_coordinates.shape != (len(entry_matrix), 2)
+        or not np.isfinite(entry_coordinates).all()
+        or not np.isfinite(reference_coordinates).all()
+    ):
+        raise ValueError("고정 UMAP 결과는 유한한 2D 좌표여야 합니다.")
+    return reference_coordinates, entry_coordinates
+
+
 def _validated_cluster_entries(state: object) -> tuple[str | None, int | None, list[dict[str, object]]]:
     if state is None:
         return None, None, []
@@ -160,7 +216,30 @@ def _validated_cluster_entries(state: object) -> tuple[str | None, int | None, l
     return state_model, dimensions, cleaned_entries
 
 
-def _cluster_outcome(entries: list[dict[str, object]], model: str) -> dict[str, object]:
+def _reference_entries_from_state(
+    state: object, dimensions: int | None
+) -> list[dict[str, object]]:
+    if not isinstance(state, dict) or state.get("projection") != "reference_umap":
+        return []
+    raw_entries = state.get("reference_entries")
+    if not isinstance(raw_entries, list) or not raw_entries or dimensions is None:
+        raise ValueError("고정 UMAP 기준 상태가 올바르지 않습니다. Reset 후 다시 시도하세요.")
+    cleaned: list[dict[str, object]] = []
+    for entry in raw_entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("text"), str):
+            raise ValueError("고정 UMAP 기준 상태가 올바르지 않습니다. Reset 후 다시 시도하세요.")
+        vector = np.asarray(entry.get("vector"), dtype=np.float64)
+        if vector.ndim != 1 or len(vector) != dimensions or not np.isfinite(vector).all():
+            raise ValueError("고정 UMAP 기준 상태가 올바르지 않습니다. Reset 후 다시 시도하세요.")
+        cleaned.append({"text": entry["text"].strip(), "vector": vector.tolist()})
+    return cleaned
+
+
+def _cluster_outcome(
+    entries: list[dict[str, object]],
+    model: str,
+    reference_entries: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     matrix = _as_embedding_matrix([entry["vector"] for entry in entries])
     cluster_count = _cluster_count(len(entries))
     assignments = (
@@ -169,7 +248,7 @@ def _cluster_outcome(entries: list[dict[str, object]], model: str) -> dict[str, 
         else _kmeans_assignments(matrix, cluster_count)
     )
     coordinates = _umap_coordinates(matrix)
-    return {
+    outcome: dict[str, object] = {
         "model": model,
         "dimensions": int(matrix.shape[1]),
         "cluster_count": cluster_count,
@@ -185,6 +264,30 @@ def _cluster_outcome(entries: list[dict[str, object]], model: str) -> dict[str, 
             for index, entry in enumerate(entries)
         ],
     }
+    if reference_entries:
+        reference_matrix = _as_embedding_matrix(
+            [entry["vector"] for entry in reference_entries]
+        )
+        reference_coordinates, coordinates = _reference_umap_coordinates(
+            reference_matrix, matrix
+        )
+        for entry, coordinate in zip(outcome["entries"], coordinates, strict=True):
+            entry["x"] = float(coordinate[0])
+            entry["y"] = float(coordinate[1])
+        x_values, y_values = reference_coordinates[:, 0], reference_coordinates[:, 1]
+        x_padding = max((float(x_values.max()) - float(x_values.min())) * 0.2, 0.5)
+        y_padding = max((float(y_values.max()) - float(y_values.min())) * 0.2, 0.5)
+        outcome.update(
+            {
+                "projection": "reference_umap",
+                "reference_entries": reference_entries,
+                "coordinate_range": {
+                    "x": [float(x_values.min()) - x_padding, float(x_values.max()) + x_padding],
+                    "y": [float(y_values.min()) - y_padding, float(y_values.max()) + y_padding],
+                },
+            }
+        )
+    return outcome
 
 
 def _comparison_outcome(
@@ -199,6 +302,8 @@ def _comparison_outcome(
                 "left": texts[left],
                 "right": texts[right],
                 "cosine_similarity": cosine_similarity(vectors[left], vectors[right]),
+                "euclidean_distance": euclidean_distance(vectors[left], vectors[right]),
+                "manhattan_distance": manhattan_distance(vectors[left], vectors[right]),
             }
             for left in range(len(texts))
             for right in range(left + 1, len(texts))
@@ -243,9 +348,10 @@ def compare_and_append_embedding_clusters(
     state: object,
     settings: Settings,
     model: str | None = None,
+    use_reference_umap: bool = False,
     embedder: Callable[[Sequence[str], Settings, str | None], np.ndarray] = embed_texts,
 ) -> dict[str, object]:
-    """Compare two texts and append both to the session cluster in one request."""
+    """Compare two texts and append both to a session-local cluster view."""
     cleaned = [text_a.strip() if isinstance(text_a, str) else "", text_b.strip() if isinstance(text_b, str) else ""]
     if any(not text for text in cleaned):
         raise ValueError("비교할 두 텍스트를 모두 입력하세요.")
@@ -254,10 +360,23 @@ def compare_and_append_embedding_clusters(
     previous_model, dimensions, entries = _validated_cluster_entries(state)
     if previous_model is not None and previous_model != selected_model:
         raise ValueError("embedding 모델이 변경되었습니다. Reset 후 새 모델로 다시 시작하세요.")
-
-    vectors = _as_embedding_matrix(
-        embedder(cleaned, settings, selected_model), expected_rows=len(cleaned)
-    )
+    reference_entries = _reference_entries_from_state(state, dimensions)
+    if use_reference_umap and not reference_entries:
+        reference_vectors_and_inputs = _as_embedding_matrix(
+            embedder([*REFERENCE_UMAP_TEXTS, *cleaned], settings, selected_model),
+            expected_rows=len(REFERENCE_UMAP_TEXTS) + len(cleaned),
+        )
+        reference_entries = [
+            {"text": text, "vector": vector.tolist()}
+            for text, vector in zip(
+                REFERENCE_UMAP_TEXTS, reference_vectors_and_inputs[: len(REFERENCE_UMAP_TEXTS)], strict=True
+            )
+        ]
+        vectors = reference_vectors_and_inputs[len(REFERENCE_UMAP_TEXTS) :]
+    else:
+        vectors = _as_embedding_matrix(
+            embedder(cleaned, settings, selected_model), expected_rows=len(cleaned)
+        )
     if dimensions is not None and vectors.shape[1] != dimensions:
         raise ValueError("embedding 차원이 변경되었습니다. Reset 후 다시 시작하세요.")
     unique_entries: list[dict[str, object]] = []
@@ -276,7 +395,9 @@ def compare_and_append_embedding_clusters(
             added_texts.append(text)
     return {
         "comparison": _comparison_outcome(cleaned, vectors, selected_model),
-        "cluster": _cluster_outcome(unique_entries, selected_model),
+        "cluster": _cluster_outcome(
+            unique_entries, selected_model, reference_entries if use_reference_umap else None
+        ),
         "added_texts": added_texts,
     }
 
@@ -296,6 +417,32 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     if denominator == 0:
         raise ValueError("zero vector의 cosine similarity는 계산할 수 없습니다.")
     return float(np.dot(left_vector, right_vector) / denominator)
+
+
+def euclidean_distance(left: Sequence[float], right: Sequence[float]) -> float:
+    """Return the straight-line distance between two embedding vectors."""
+    left_vector, right_vector = _matching_embedding_vectors(left, right)
+    return float(np.linalg.norm(left_vector - right_vector))
+
+
+def manhattan_distance(left: Sequence[float], right: Sequence[float]) -> float:
+    """Return the sum of coordinate-wise differences between two vectors."""
+    left_vector, right_vector = _matching_embedding_vectors(left, right)
+    return float(np.abs(left_vector - right_vector).sum())
+
+
+def _matching_embedding_vectors(
+    left: Sequence[float], right: Sequence[float]
+) -> tuple[np.ndarray, np.ndarray]:
+    left_vector = np.asarray(left, dtype=np.float64)
+    right_vector = np.asarray(right, dtype=np.float64)
+    if (
+        left_vector.ndim != 1
+        or right_vector.ndim != 1
+        or left_vector.shape != right_vector.shape
+    ):
+        raise ValueError("두 embedding은 같은 차원의 1D vector여야 합니다.")
+    return left_vector, right_vector
 
 
 def compare_embeddings(

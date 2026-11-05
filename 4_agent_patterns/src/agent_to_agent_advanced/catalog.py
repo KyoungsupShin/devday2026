@@ -25,7 +25,7 @@ AGENT_URLS = {
 AGENT_CATALOG = (
     {
         "agent_id": "fb-facilities-team",
-        "agent_label": "F&B 설비팀 Agent",
+        "agent_label": "F&B 설비팀 Assistant",
         "skill_id": "facility_incident_and_recovery",
         "description": (
             "설비 식별자·현장 관찰·기술 제약·운영 영향을 구조화합니다. "
@@ -38,7 +38,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "fb-procurement-team",
-        "agent_label": "F&B 구매팀 Agent",
+        "agent_label": "F&B 구매팀 Assistant",
         "skill_id": "procurement_and_supply_review",
         "description": "조달·재고·수급 관점의 선택지를 검토합니다. 역할별 읽기 전용 Tool 결과가 있으면 그 범위 안에서만 근거로 사용합니다.",
         "role_prompt_key": "teams.procurement.perspective",
@@ -51,7 +51,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "manufacturing-planning-team",
-        "agent_label": "제조기획팀 Agent",
+        "agent_label": "제조기획팀 Assistant",
         "skill_id": "production_and_material_readiness",
         "description": "생산계획, 자재소요, 신규 원부자재와 생산 투입 준비도를 검토합니다. 역할별 읽기 전용 CSV 스냅샷 결과가 있으면 그 범위 안에서만 근거로 사용합니다.",
         "role_prompt_key": "teams.manufacturing_planning.perspective",
@@ -65,7 +65,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "finance-business-planning-team",
-        "agent_label": "재무·사업기획팀 Agent",
+        "agent_label": "재무·사업기획팀 Assistant",
         "skill_id": "financial_control_and_enterprise_planning",
         "description": "수익성·원가, 예산 여력, Cost Center, 예산 이관의 판단 근거를 검토합니다. 실제 승인·이관·전기는 수행하지 않습니다.",
         "role_prompt_key": "teams.finance_business_planning.perspective",
@@ -80,7 +80,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "it-team",
-        "agent_label": "IT팀 Agent",
+        "agent_label": "IT팀 Assistant",
         "skill_id": "erp_change_readiness",
         "description": "승인된 업무 변경의 ERP 필드 매핑, 검증 전제조건, 변경 요청 추적성을 검토합니다. 업무·품질·조달 승인 자체의 재검토는 해당 책임 Team 범위입니다. 외부 ERP 조회·변경을 직접 수행하지 않습니다.",
         "role_prompt_key": "teams.it.perspective",
@@ -90,7 +90,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "ehs-team",
-        "agent_label": "EHS 환경안전팀 Agent",
+        "agent_label": "EHS 환경안전팀 Assistant",
         "skill_id": "safety_environment_and_permit_review",
         "description": "작업 안전, 환경 관리, 화학물질과 작업허가 관점의 근거를 검토합니다. 현장·품질·생산의 업무 판단은 각 책임 Team과 구분합니다.",
         "role_prompt_key": "teams.ehs.perspective",
@@ -100,7 +100,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "hr-team",
-        "agent_label": "인사팀 Agent",
+        "agent_label": "인사팀 Assistant",
         "skill_id": "workforce_and_qualification_review",
         "description": "인력 운영, 교육·자격, 근태·노무 관점의 근거를 검토합니다. 인사 조치나 근무 배정은 수행하지 않습니다.",
         "role_prompt_key": "teams.hr.perspective",
@@ -110,7 +110,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "general-affairs-team",
-        "agent_label": "총무팀 Agent",
+        "agent_label": "총무팀 Assistant",
         "skill_id": "site_services_and_asset_support",
         "description": "사업장 운영지원, 비생산 자산·비품, 출입·보안 지원 근거를 검토합니다. 생산설비 정비와 IT 권한 관리는 별도 범위입니다.",
         "role_prompt_key": "teams.general_affairs.perspective",
@@ -124,7 +124,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "process-engineering-team",
-        "agent_label": "공정팀 Agent",
+        "agent_label": "공정팀 Assistant",
         "skill_id": "process_engineering_and_validation",
         "description": "공정 조건, 수율·처리량, 공정 변경·검증 관점의 근거를 검토합니다. 품질 승인과 생산 실행은 별도 범위입니다.",
         "role_prompt_key": "teams.process_engineering.perspective",
@@ -134,7 +134,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "rnd-team",
-        "agent_label": "R&D팀 Agent",
+        "agent_label": "R&D팀 Assistant",
         "skill_id": "product_development_and_scaleup",
         "description": "제품·원료 개발, 규격 설계, 스케일업·기술이전 준비 근거를 검토합니다. 품질 release와 양산 승인은 수행하지 않습니다.",
         "role_prompt_key": "teams.rnd.perspective",
@@ -148,7 +148,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "production-team",
-        "agent_label": "생산팀 Agent",
+        "agent_label": "생산팀 Assistant",
         "skill_id": "production_execution_and_traceability",
         "description": "생산 실행, 라인 운영, 배치·Lot 추적성 관점의 근거를 검토합니다. 생산계획 수립과 품질 판정은 별도 범위입니다.",
         "role_prompt_key": "teams.production.perspective",
@@ -158,7 +158,7 @@ AGENT_CATALOG = (
     },
     {
         "agent_id": "quality-team",
-        "agent_label": "품질팀 Agent",
+        "agent_label": "품질팀 Assistant",
         "skill_id": "quality_assurance_control_and_release",
         "description": "품질시스템, 시험·검사, 규격 적합성, 품질 release 관점의 근거를 검토합니다. 제품 개발과 생산 실행의 독립적 검증 역할을 유지합니다.",
         "role_prompt_key": "teams.quality.perspective",

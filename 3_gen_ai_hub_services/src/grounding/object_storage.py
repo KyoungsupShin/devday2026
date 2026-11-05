@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from lab_common.config import Settings
-from lab_common.grounding_repository import upload_text_document
+from .lesson_support.config import Settings
+from .lesson_support.grounding_repository import upload_text_document
 
 
 def _clean(value: Any) -> str:

@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from lab_common.config import load_settings
-from lab_common.llm import chat_text
+from ..lesson_support.config import load_settings
+from ..lesson_support.llm import chat_text
 
 from . import snapshot_reader
 from .context_records import base_response, string_argument

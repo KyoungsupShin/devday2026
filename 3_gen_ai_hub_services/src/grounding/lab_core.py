@@ -5,12 +5,12 @@ from collections.abc import Iterator
 from collections.abc import Mapping
 from typing import Any
 
-from lab_common.ai_core import (
+from .lesson_support.ai_core import (
     apply_ai_core_environment,
     llm_model_params,
     orchestration_url,
 )
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 
 
 def _sdk() -> dict[str, Any]:

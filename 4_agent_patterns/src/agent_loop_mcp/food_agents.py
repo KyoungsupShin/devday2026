@@ -5,9 +5,9 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from lab_common.llm import chat_text, chat_text_stream
-from lab_common.config import Settings, load_settings
-from src.agent_clients import chat_tool_completion
+from .lesson_support.llm import chat_text, chat_text_stream
+from .lesson_support.config import Settings, load_settings
+from src.agent_to_agent_advanced.agent_client import chat_tool_completion
 
 from .agents.registry import (
     FOOD_AGENT_BY_ID,

@@ -10,7 +10,7 @@ from typing import Any
 from urllib.parse import quote
 
 import gradio as gr
-from lab_common.config import Settings, load_settings
+from .lesson_support.config import Settings, load_settings
 
 from .catalog import (
     AGENT_CATALOG,
@@ -24,13 +24,10 @@ from .harness import (
     active_runtime_overlays_for_request,
     analyse_trace,
     apply_human_selection,
-    adopt_variant,
     evaluate_comparison,
     load_revision_library,
     record_live_verification,
     rollback_active_revision,
-    rollback_adoption,
-    run_harness_experiment,
 )
 from .history import persist_a2a_conversation, persist_human_approval_action
 from .human_approval import OutlookMailError, send_outlook_mail
@@ -313,6 +310,19 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       }
       state.messageCount = count;
     }
+    const timelineUpdates = payload.timeline_updates && typeof payload.timeline_updates === "object"
+      ? payload.timeline_updates
+      : {};
+    let timelineChanged = false;
+    Object.entries(timelineUpdates).forEach(([timelineId, timelineHtml]) => {
+      if (typeof timelineHtml !== "string") return;
+      const existing = Array.from(state.messages.querySelectorAll("[data-a2a-timeline-id]"))
+        .find((node) => node.dataset.a2aTimelineId === timelineId);
+      if (existing && existing.outerHTML !== timelineHtml) {
+        existing.outerHTML = timelineHtml;
+        timelineChanged = true;
+      }
+    });
     const typing = typingContainer();
     const nextTypingHtml = typeof payload.typing_html === "string" ? payload.typing_html : "";
     const typingChanged = state.typingHtml !== nextTypingHtml;
@@ -320,7 +330,7 @@ _A2A_GROUP_CHAT_SCROLL_JS = """
       typing.innerHTML = nextTypingHtml;
       state.typingHtml = nextTypingHtml;
     }
-    if (state.atLatest && (added || typingChanged)) {
+    if (state.atLatest && (added || typingChanged || timelineChanged)) {
       requestAnimationFrame(() => {
         if (state.atLatest) scrollToLatest(state.messages);
       });
@@ -652,6 +662,94 @@ def _delegation_chat_message(
     return message
 
 
+def _timeline_text(timeline: dict[str, Any]) -> str:
+    """Create the persisted-text equivalent of a mutable team timeline."""
+    parts = ["팀 검토 진행"]
+    for item in timeline.get("delegations", []):
+        if not isinstance(item, dict):
+            continue
+        agent = _display_text(item.get("agent"))
+        goal = _display_text(item.get("goal"))
+        state = _display_text(item.get("state"))
+        summary = _display_text(item.get("summary"))
+        detail = _display_text(item.get("detail"))
+        parts.append("\n".join(value for value in (
+            f"담당자: {agent}" if agent else "",
+            f"검토 목표: {goal}" if goal else "",
+            f"진행 상태: {state}" if state else "",
+            f"검토 결과: {summary}" if summary else "",
+            f"상세: {detail}" if detail else "",
+        ) if value))
+    team_result = timeline.get("team_result")
+    if isinstance(team_result, dict):
+        parts.append("\n".join(value for value in (
+            "팀 종합",
+            f"팀 요약: {_display_text(team_result.get('summary'))}",
+            f"근거: {_display_text(team_result.get('evidence'))}",
+            f"다음 조치: {_display_text(team_result.get('next_action'))}",
+        ) if value))
+    return "\n\n".join(part for part in parts if part)
+
+
+def _team_timeline_chat_message(
+    status: dict[str, Any], team_labels: dict[str, str], timeline_id: str
+) -> dict[str, Any]:
+    """Create the single mutable chat message for a Team review."""
+    team_id = str(status.get("team", "A2A Team"))
+    delegations = []
+    for item in status.get("delegations", []):
+        if not isinstance(item, dict):
+            continue
+        agent, goal = item.get("agent"), item.get("goal")
+        if isinstance(agent, str) and agent.strip():
+            delegations.append({
+                "agent": agent.strip(), "goal": goal.strip() if isinstance(goal, str) else "",
+                "state": "대기", "summary": "", "detail": "",
+            })
+    timeline = {"team_id": team_id, "delegations": delegations, "synthesis_state": "대기", "team_result": None}
+    return {
+        "sender": team_labels.get(team_id, team_id), "kind": "agent",
+        "timeline_id": timeline_id, "team_timeline": timeline,
+        "text": _timeline_text(timeline),
+    }
+
+
+def _update_team_timeline(message: dict[str, Any], status_event: str, status: dict[str, Any]) -> None:
+    """Apply a Team status event to the existing timeline message."""
+    timeline = message.get("team_timeline")
+    if not isinstance(timeline, dict):
+        return
+    agent = status.get("agent")
+    delegation = next((item for item in timeline.get("delegations", [])
+                       if isinstance(item, dict) and item.get("agent") == agent), None)
+    if status_event == "subagent_started" and isinstance(delegation, dict):
+        delegation["state"] = "검토 중"
+    elif status_event == "subagent_completed" and isinstance(delegation, dict):
+        details = _subagent_display_details(status.get("artifact") if isinstance(status.get("artifact"), dict) else {})
+        delegation["state"] = "완료"
+        delegation["summary"] = details["chat_summary"] or details["finding"]
+        delegation["detail"] = "\n\n".join(value for value in (
+            f"검토 결과: {details['finding']}" if details["finding"] else "",
+            f"근거: {details['evidence']}" if details["evidence"] else "",
+            f"추가 확인 사항: {details['next_input']}" if details["next_input"] else "",
+        ) if value)
+    elif status_event == "synthesis_started":
+        timeline["synthesis_state"] = "종합 중"
+    elif status_event in {"synthesis_completed", "team_completed"}:
+        timeline["synthesis_state"] = "완료"
+    message["text"] = _timeline_text(timeline)
+
+
+def _attach_team_timeline_result(message: dict[str, Any], artifact: dict[str, Any]) -> None:
+    """Attach the final Team synthesis to the last timeline step."""
+    timeline = message.get("team_timeline")
+    if not isinstance(timeline, dict):
+        return
+    timeline["synthesis_state"] = "완료"
+    timeline["team_result"] = _team_display_details(artifact)
+    message["text"] = _timeline_text(timeline)
+
+
 def _subagent_chat_message(
     status: dict[str, Any], team_labels: dict[str, str]
 ) -> dict[str, Any] | None:
@@ -800,8 +898,8 @@ def _observation_chat_message(observation: dict[str, Any]) -> dict[str, str]:
     )
 
 
-def _grounding_chat_message(audit: dict[str, Any]) -> dict[str, str]:
-    """Show a concise business-reference check without exposing raw evidence."""
+def _grounding_chat_message(audit: dict[str, Any]) -> dict[str, Any]:
+    """Show repository coverage and retrieved source filenames on demand."""
     state = str(audit.get("state", "unknown"))
     document_count = audit.get("document_count", 0)
     if state == "grounded":
@@ -812,7 +910,13 @@ def _grounding_chat_message(audit: dict[str, Any]) -> dict[str, str]:
         text = "업무 기준 문서 확인이 설정되지 않았습니다."
     else:
         text = "관련 업무 기준을 확인하지 못했습니다."
-    return {"sender": "업무 기준 확인", "kind": "system", "text": text}
+    return {
+        "sender": "업무 기준 확인", "kind": "system", "text": text,
+        "grounding_sources": [
+            identifier for identifier in audit.get("document_ids", [])
+            if isinstance(identifier, str) and identifier.strip()
+        ],
+    }
 
 
 def _human_approval_chat_message(draft: dict[str, Any]) -> dict[str, Any]:
@@ -1248,8 +1352,68 @@ def _subagent_review_body_html(message: dict[str, Any]) -> str | None:
     )
 
 
+def _team_timeline_body_html(message: dict[str, Any]) -> str | None:
+    """Render the compact, mutable timeline for one Team review."""
+    timeline = message.get("team_timeline")
+    if not isinstance(timeline, dict):
+        return None
+    items = []
+    for item in timeline.get("delegations", []):
+        if not isinstance(item, dict):
+            continue
+        agent, goal = _display_text(item.get("agent")), _display_text(item.get("goal"))
+        state = _display_text(item.get("state")) or "대기"
+        summary, detail = _display_text(item.get("summary")), _display_text(item.get("detail"))
+        state_class = {"대기": "pending", "검토 중": "working", "완료": "completed"}.get(state, "pending")
+        headline = summary or goal
+        detail_html = (
+            '<details class="a2a-team-timeline__step-details"><summary>검토 상세</summary>'
+            f'<div>{_section_body_html(detail)}</div></details>' if detail else ""
+        )
+        items.append(
+            '<li class="a2a-team-timeline__step a2a-team-timeline__step--' + state_class + '">'
+            + '<span class="a2a-team-timeline__marker" aria-hidden="true"></span>'
+            + '<div class="a2a-team-timeline__content"><span class="a2a-team-timeline__agent-avatar">'
+            + _brand_avatar_html("joule.png", "Joule", "joule") + '</span>'
+            + f'<b>{html.escape(agent or "검토 담당")}</b><span class="a2a-team-timeline__state">{html.escape(state)}</span>'
+            + (f'<div class="a2a-team-timeline__headline">{_section_body_html(headline)}</div>' if headline else "")
+            + detail_html + '</div></li>'
+        )
+    synthesis_state = _display_text(timeline.get("synthesis_state")) or "대기"
+    team_result = timeline.get("team_result")
+    result_summary = result_detail = ""
+    if isinstance(team_result, dict):
+        result_summary = _display_text(team_result.get("chat_summary")) or _display_text(team_result.get("summary"))
+        result_detail = "\n\n".join(value for value in (
+            f"팀 요약: {_display_text(team_result.get('summary'))}",
+            f"근거: {_display_text(team_result.get('evidence'))}",
+            f"다음 조치: {_display_text(team_result.get('next_action'))}",
+        ) if value.split(": ", 1)[-1])
+    synthesis_class = {"대기": "pending", "종합 중": "working", "완료": "completed"}.get(synthesis_state, "pending")
+    synthesis_detail = (
+        '<details class="a2a-team-timeline__step-details"><summary>종합 상세</summary>'
+        f'<div>{_section_body_html(result_detail)}</div></details>' if result_detail else ""
+    )
+    items.append(
+        '<li class="a2a-team-timeline__step a2a-team-timeline__step--' + synthesis_class + '">'
+        + '<span class="a2a-team-timeline__marker" aria-hidden="true"></span>'
+        + '<div class="a2a-team-timeline__content"><b>팀 종합</b>'
+        + f'<span class="a2a-team-timeline__state">{html.escape(synthesis_state)}</span>'
+        + (f'<div class="a2a-team-timeline__headline">{_section_body_html(result_summary)}</div>' if result_summary else "")
+        + synthesis_detail + '</div></li>'
+    )
+    return ('<div class="a2a-group-chat__title">팀 검토 진행</div>'
+            + '<section class="a2a-team-timeline" aria-label="팀 검토 진행 상황"><ol>'
+            + ''.join(items) + '</ol></section>')
+
+
 def _message_body_html(message: dict[str, Any]) -> str:
     """Render structured message sections without dropping any text."""
+    if "grounding_sources" in message:
+        sources = message.get("grounding_sources")
+        filenames = [identifier.strip() for identifier in (sources if isinstance(sources, list) else []) if isinstance(identifier, str) and identifier.strip()]
+        tooltip_text = "검색 결과 참조 문서\n" + "\n".join(filenames) if filenames else "검색 결과에서 참조 문서 파일명을 확인하지 못했습니다."
+        return f'<span>{html.escape(str(message.get("text") or ""))}</span>' + _tooltip_html("참조 문서", tooltip_text)
     harness_html = message.get("harness_html")
     if isinstance(harness_html, str):
         return harness_html
@@ -1311,6 +1475,8 @@ def _message_body_html(message: dict[str, Any]) -> str:
         return approval_body
     if team_body := _team_review_body_html(message):
         return team_body
+    if timeline_body := _team_timeline_body_html(message):
+        return timeline_body
     if subagent_body := _subagent_review_body_html(message):
         return subagent_body
     sections = message.get("sections")
@@ -1348,7 +1514,13 @@ def _chat_message_html(message: dict[str, Any]) -> str:
     bubble_class = (
         " a2a-group-chat__bubble--streaming" if message.get("streaming") else ""
     )
-    return f"""<div class="a2a-group-chat__row a2a-group-chat__row--{html.escape(kind)}">
+    timeline_id = message.get("timeline_id")
+    timeline_attribute = (
+        f' data-a2a-timeline-id="{html.escape(timeline_id, quote=True)}"'
+        if isinstance(timeline_id, str) and timeline_id
+        else ""
+    )
+    return f"""<div class="a2a-group-chat__row a2a-group-chat__row--{html.escape(kind)}"{timeline_attribute}>
       <div class="a2a-group-chat__avatar">{_message_avatar_html(raw_sender, kind)}</div>
       <div><div class="a2a-group-chat__sender">{sender}</div><div class="a2a-group-chat__bubble{bubble_class}">{body}</div></div>
     </div>"""
@@ -1376,6 +1548,11 @@ def _chat_payload_html(
     payload = {
         "message_count": len(messages),
         "messages": [_chat_message_html(message) for message in messages],
+        "timeline_updates": {
+            message["timeline_id"]: _chat_message_html(message)
+            for message in messages
+            if isinstance(message.get("timeline_id"), str) and message["timeline_id"]
+        },
         "typing_html": _typing_bubbles_html(typing_agents),
     }
     serialized = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
@@ -1673,7 +1850,7 @@ def _harness_dashboard_html(experiment: dict[str, Any] | None = None) -> str:
 
 
 def _trace_option_html(option: dict[str, Any]) -> str:
-    """Render one human-reviewable Harness proposal without exposing unsafe HTML."""
+    """Render a keyword-first, human-reviewable Harness proposal."""
     badge = '<span class="a2a-harness-recommendation">AI 추천</span>' if option.get("recommended") else ""
     evidence = "".join(f"<li>{html.escape(str(item))}</li>" for item in option.get("evidence", []))
     changes = "".join(
@@ -1687,18 +1864,56 @@ def _trace_option_html(option: dict[str, Any]) -> str:
     controls = html.escape(str(impact.get("mandatory_controls") or "기존 승인·읽기 전용·필수 검증을 유지합니다."))
     build_required = bool(impact.get("build_required"))
     build_badge = "Build 필요" if build_required else "런타임 반영 가능"
+    components = [
+        COMPONENT_LABELS.get(str(change.get("component")), "Runtime")
+        for change in option.get("changes", []) if isinstance(change, dict)
+    ]
+    keywords = [*dict.fromkeys([*components, build_badge])]
+    keyword_html = "".join(
+        f'<span class="a2a-harness-keyword">{html.escape(keyword)}</span>'
+        for keyword in keywords
+    )
     return (
         '<section class="a2a-harness-option">'
-        f'<div><b>{html.escape(str(option.get("option_id", "-")))}. {html.escape(str(option.get("title", "개선안")))}</b>{badge}</div>'
-        f'<p>{html.escape(str(option.get("rationale", "")))}</p>'
+        f'<div class="a2a-harness-option__heading"><b>{html.escape(str(option.get("option_id", "-")))}. {html.escape(str(option.get("title", "개선안")))}</b>{badge}</div>'
+        f'<div class="a2a-harness-keywords">{keyword_html}</div>'
+        f'<p class="a2a-harness-option__summary">{html.escape(str(option.get("rationale", "")))}</p>'
+        '<details class="a2a-harness-option__details"><summary>근거 · 적용 범위</summary>'
         '<div class="a2a-harness-option__meta">'
-        f'<span><b>효과</b> {benefit}</span>'
+        f'<span><b>기대 효과</b> {benefit}</span>'
         f'<span><b>유지 통제</b> {controls}</span>'
-        f'<em class="a2a-harness-option__build{" a2a-harness-option__build--required" if build_required else ""}">{build_badge}</em>'
         '</div>'
         f'<span>실행 근거</span><ul>{evidence}</ul>'
-        f'<span>변경 사항</span><ul>{changes}</ul>'
+        f'<span>변경 사항</span><ul>{changes}</ul></details>'
         "</section>"
+    )
+
+
+def _trace_analysis_html(analysis: dict[str, Any]) -> str:
+    """Keep Harness analysis scannable while retaining its full evidence locally."""
+    decision = str(analysis.get("decision", ""))
+    labels = {"no_change": "변경 불필요", "insufficient_evidence": "근거 부족", "propose": "개선안 제안"}
+    evidence = analysis.get("evidence", [])
+    evidence = evidence if isinstance(evidence, list) else []
+    options = analysis.get("options", [])
+    options = options if isinstance(options, list) else []
+    keywords = (
+        f'<span class="a2a-harness-keyword a2a-harness-keyword--primary">{html.escape(labels.get(decision, "분석 완료"))}</span>'
+        f'<span class="a2a-harness-keyword">도메인 · {html.escape(str(analysis.get("domain", "-")))}</span>'
+        f'<span class="a2a-harness-keyword">근거 · {len(evidence)}건</span>'
+        f'<span class="a2a-harness-keyword">후보 · {len(options)}개</span>'
+    )
+    detail = "\n".join(str(item) for item in evidence if str(item).strip())
+    rationale = _display_text(analysis.get("rationale"))
+    return (
+        '<section class="a2a-harness-result"><div class="a2a-harness-result__eyebrow">실행 로그 분석</div>'
+        f'<div class="a2a-harness-keywords">{keywords}</div>'
+        + (f'<p>{html.escape(rationale)}</p>' if rationale else "")
+        + (
+            '<details class="a2a-harness-result__details"><summary>분석 근거</summary>'
+            f'<div>{_section_body_html(detail)}</div></details>' if detail else ""
+        )
+        + "</section>"
     )
 
 
@@ -1714,13 +1929,10 @@ def _trace_harness_chat_html(
             messages.append({"sender": "Harness Labs", "kind": "system", "harness_action": "analyse"})
     else:
         decision = str(analysis.get("decision", ""))
-        labels = {"no_change": "변경 불필요", "insufficient_evidence": "근거 부족", "propose": "개선안 제안"}
-        messages.append(_sectioned_chat_message(
-            "Harness Labs", "agent",
-            ("분석 결과", labels.get(decision, "분석 완료")),
-            ("판단", analysis.get("rationale", "-")),
-            ("근거", analysis.get("evidence", [])), heading="실행 로그 분석",
-        ))
+        messages.append({
+            "sender": "Harness Labs", "kind": "agent",
+            "harness_html": _trace_analysis_html(analysis),
+        })
         if decision == "propose":
             options = [item for item in analysis.get("options", []) if isinstance(item, dict)]
             for option in options:
@@ -1858,8 +2070,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         event_log, middleware = [], []
         chat_messages = list(previous_messages or [])
         typing_agents: set[str] = set()
-        rendered_delegations: set[str] = set()
-        rendered_subagent_artifacts: set[tuple[str, str]] = set()
+        active_team_timelines: dict[str, dict[str, Any]] = {}
         pending_approvals = [
             draft for draft in (previous_approvals or []) if isinstance(draft, dict)
         ]
@@ -2020,36 +2231,44 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                         typing_agents.add(team_label)
                     elif status_event == "delegation_selected":
                         typing_agents.discard(team_label)
-                        if handoff_id not in rendered_delegations:
-                            chat_messages.append(
-                                _delegation_chat_message(status, labels)
-                            )
-                            rendered_delegations.add(handoff_id)
+                        timeline_id = handoff_id or f"{team_id}-{len(chat_messages)}"
+                        timeline_message = _team_timeline_chat_message(
+                            status, labels, timeline_id
+                        )
+                        active_team_timelines[team_id] = timeline_message
+                        chat_messages.append(timeline_message)
                     elif status_event == "subagent_started" and isinstance(
                         subagent, str
                     ):
                         typing_agents.add(f"{team_label} · {subagent}")
+                        if timeline_message := active_team_timelines.get(team_id):
+                            _update_team_timeline(timeline_message, status_event, status)
                     elif status_event == "subagent_completed" and isinstance(
                         subagent, str
                     ):
                         sender = f"{team_label} · {subagent}"
                         typing_agents.discard(sender)
-                        artifact_key = (handoff_id, subagent)
-                        message = _subagent_chat_message(status, labels)
-                        if (
-                            message is not None
-                            and artifact_key not in rendered_subagent_artifacts
-                        ):
-                            chat_messages.append(message)
-                            rendered_subagent_artifacts.add(artifact_key)
+                        if timeline_message := active_team_timelines.get(team_id):
+                            _update_team_timeline(timeline_message, status_event, status)
                     elif status_event == "synthesis_started":
                         typing_agents.add(team_label)
+                        if timeline_message := active_team_timelines.get(team_id):
+                            _update_team_timeline(timeline_message, status_event, status)
                     elif status_event in {"synthesis_completed", "team_completed"}:
                         typing_agents.discard(team_label)
+                        if timeline_message := active_team_timelines.get(team_id):
+                            _update_team_timeline(timeline_message, status_event, status)
                 elif kind == "artifact_received":
-                    artifact_message = _artifact_chat_message(event["record"], labels)
-                    typing_agents.discard(artifact_message["sender"])
-                    chat_messages.append(artifact_message)
+                    record = event["record"]
+                    producer = str(record.get("producer", ""))
+                    timeline_message = active_team_timelines.get(producer)
+                    if timeline_message and isinstance(record.get("artifact"), dict):
+                        _attach_team_timeline_result(timeline_message, record["artifact"])
+                        typing_agents.discard(str(timeline_message.get("sender", "")))
+                    else:
+                        artifact_message = _artifact_chat_message(record, labels)
+                        typing_agents.discard(artifact_message["sender"])
+                        chat_messages.append(artifact_message)
                     event_log.append({"event": "artifact_received"})
                 elif kind == "complete":
                     outcome = event["result"]
@@ -2369,6 +2588,15 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     .a2a-harness-option{padding:10px;border:1px solid #ded5f0;border-radius:10px;background:#fff}.a2a-harness-option>div{display:flex;gap:7px;align-items:center;color:#443177}.a2a-harness-option p{margin:7px 0;color:#4e4661;font-size:12px;line-height:1.5}.a2a-harness-option>span{display:block;margin-top:8px;color:#7059a0;font-size:10px;font-weight:800}.a2a-harness-option ul{margin:4px 0 0;padding-left:17px;color:#5a526b;font-size:11px;line-height:1.5}.a2a-harness-option__meta{display:grid!important;gap:5px!important;margin-top:8px;padding:8px!important;border-radius:8px!important;background:#f8f6ff!important}.a2a-harness-option__meta span{display:block!important;margin:0!important;color:#5a4d7d!important;font-size:10px!important;font-weight:500!important;line-height:1.4!important}.a2a-harness-option__meta b{color:#4a3980}.a2a-harness-option__build{justify-self:start;padding:3px 6px;border-radius:999px;background:#e9f7ed;color:#17683c;font-size:10px;font-style:normal;font-weight:800}.a2a-harness-option__build--required{background:#fff0d6;color:#8a5200}.a2a-harness-recommendation{display:inline-block!important;margin:0!important;padding:3px 6px;border-radius:999px;background:#ede6ff;color:#5133a0!important;font-size:10px!important;white-space:nowrap}.a2a-harness-chat .a2a-group-chat__row--field .a2a-group-chat__bubble:has(.a2a-harness-action){width:min(100%,480px);padding:12px!important;border:1px solid #d9cfef!important;border-radius:12px!important;background:#fff!important;color:#31294a!important;box-shadow:0 2px 6px rgba(72,49,151,.09)!important}.a2a-harness-action{display:grid;gap:8px;color:#31294a!important;text-align:left}.a2a-harness-action>span{display:block!important;margin:0!important;color:#51486a!important;font-size:12px!important;font-weight:800!important;line-height:1.35!important}.a2a-harness-action select{box-sizing:border-box;width:100%;height:36px!important;padding:0 10px!important;border:1px solid #cfc2ee!important;border-radius:8px!important;background:#fff!important;color:#413464!important;font-size:12px!important;font-weight:700!important}.a2a-harness-action textarea{display:block;box-sizing:border-box;width:100%;min-height:48px!important;height:48px!important;margin:0!important;padding:8px 10px!important;border:1px solid #cfc2ee;border-radius:8px;background:#fff;color:#342a4f;font:12px/1.35 inherit;resize:vertical}.a2a-harness-action textarea::placeholder{color:#7e7494;opacity:1}.a2a-harness-action textarea:focus{outline:0;border-color:#7452cc;box-shadow:0 0 0 2px rgba(116,82,204,.18)}.a2a-harness-action button{width:fit-content!important;min-width:128px!important;height:32px!important;margin-top:0!important;padding:6px 12px!important;border-radius:8px!important;font-size:12px!important}.a2a-harness-shell .a2a-group-chat__system:has(.a2a-harness-action--rollback){box-sizing:border-box!important;width:min(100%,500px)!important;max-width:calc(100% - 24px)!important;margin:10px auto 14px!important;padding:10px 12px!important;border:1px solid #d9cfef!important;border-radius:10px!important;background:#fff!important;color:#31294a!important;box-shadow:0 1px 3px rgba(72,49,151,.08)!important}.a2a-harness-action--rollback{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-width:0!important}.a2a-harness-action--rollback>span{flex:1!important;color:#5d5470!important;font-size:11px!important;font-weight:600!important}.a2a-harness-action--rollback button{flex:none!important;min-width:0!important;height:30px!important;padding:5px 11px!important;border:1px solid #d1c5ed!important;background:#f6f2ff!important;color:#5838aa!important}.a2a-harness-action--rollback button:hover{border-color:#9f87dc!important;background:#ece5ff!important}
     @media(max-width:700px){.a2a-group-chat__messages{padding:14px 10px!important}.a2a-group-chat__room-status{display:none}.a2a-group-chat__bubble{font-size:12px}.a2a-group-chat__row>div:last-child{max-width:calc(100% - 45px)}}
     """
+    css += """
+    /* Harness Labs favours scan-friendly keywords over dense explanatory text. */
+    .a2a-harness-shell .a2a-group-chat__header{min-height:64px!important}.a2a-harness-shell .a2a-group-chat__room-title b{font-size:16px!important}.a2a-harness-shell .a2a-group-chat__room-title span:not(.a2a-group-chat__room-avatar),.a2a-harness-shell .a2a-group-chat__room-status{font-size:12px!important}.a2a-harness-chat .a2a-group-chat__bubble{font-size:14px!important;line-height:1.62!important}.a2a-harness-chat .a2a-group-chat__sender{font-size:12px!important}.a2a-harness-result,.a2a-harness-option{padding:13px!important;border-radius:12px!important}.a2a-harness-result{border:1px solid #d9cfef;background:#fff}.a2a-harness-result__eyebrow{margin-bottom:9px;color:#5d3ec1;font-size:12px;font-weight:900;letter-spacing:.04em}.a2a-harness-keywords{display:flex;flex-wrap:wrap;gap:6px}.a2a-harness-keyword{display:inline-flex;align-items:center;padding:4px 8px;border:1px solid #d8ceed;border-radius:999px;background:#f6f2ff;color:#594283;font-size:12px;font-weight:800;line-height:1.3}.a2a-harness-keyword--primary{border-color:#7655ca;background:#5d3ec1;color:#fff}.a2a-harness-result>p,.a2a-harness-option__summary{margin:10px 0 0!important;color:#3d3453!important;font-size:14px!important;font-weight:700!important;line-height:1.55!important}.a2a-harness-result__details,.a2a-harness-option__details{margin-top:10px;padding-top:9px;border-top:1px solid #e4ddef;color:#554b68;font-size:13px;line-height:1.55}.a2a-harness-result__details summary,.a2a-harness-option__details summary{color:#5b3fa9;font-size:12px;font-weight:900;cursor:pointer}.a2a-harness-result__details>div{padding-top:8px}.a2a-harness-option__heading{display:flex!important;align-items:center;flex-wrap:wrap;gap:7px;color:#342563!important}.a2a-harness-option__heading b{font-size:15px}.a2a-harness-option__details>span{display:block;margin-top:10px;color:#654f93;font-size:12px;font-weight:900}.a2a-harness-option__details ul{margin:5px 0 0!important;padding-left:19px!important;color:#514864!important;font-size:13px!important;line-height:1.55!important}.a2a-harness-option__meta{gap:7px!important;padding:10px!important}.a2a-harness-option__meta span{font-size:12px!important;line-height:1.5!important}.a2a-harness-recommendation{font-size:11px!important}.a2a-harness-dashboard{font-size:13px!important;line-height:1.55!important}.a2a-harness-dashboard>b{font-size:15px!important}.a2a-harness-dashboard>p{font-size:13px!important}.a2a-harness-dashboard table{font-size:12px!important}.a2a-harness-dashboard th,.a2a-harness-dashboard td{padding:7px 6px!important}.a2a-harness-dashboard__verification span{font-size:12px!important}@media(max-width:900px){.a2a-harness-chat .a2a-group-chat__bubble{font-size:13px!important}.a2a-harness-dashboard table{font-size:11px!important}.a2a-harness-dashboard th,.a2a-harness-dashboard td{padding:6px 4px!important}}
+    """
+    css += """
+    /* One compact card per Team: each review retains its own expandable detail. */
+    .a2a-team-timeline{margin:2px 0 0;padding:2px 0}.a2a-team-timeline ol{display:grid;gap:7px;margin:0;padding:0;list-style:none}.a2a-team-timeline__step{position:relative;min-width:0;padding:0 0 0 27px}.a2a-team-timeline__step:not(:last-child)::after{position:absolute;top:19px;bottom:-9px;left:9px;width:2px;background:#d6e2e9;content:""}.a2a-team-timeline__marker{position:absolute;z-index:1;top:8px;left:3px;width:14px;height:14px;border:3px solid #a8b9c6;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #fff}.a2a-team-timeline__step--working .a2a-team-timeline__marker{border-color:#7956d6;background:#7956d6;box-shadow:0 0 0 3px #fff,0 0 0 6px rgba(121,86,214,.14)}.a2a-team-timeline__step--completed .a2a-team-timeline__marker{border-color:#2f9368;background:#2f9368}.a2a-team-timeline__step--completed .a2a-team-timeline__marker::after{display:block;color:#fff;content:"✓";font-size:10px;font-weight:900;line-height:14px;text-align:center}.a2a-team-timeline__content{min-height:0;padding:9px 11px;border:1px solid #d7e3eb;border-radius:9px;background:#fff;box-shadow:0 1px 2px rgba(48,73,94,.05)}.a2a-team-timeline__agent-avatar{display:inline-grid;place-items:center;width:19px;height:19px;margin:0 6px 0 0;border:1px solid #e1dcef;border-radius:50%;background:#fff;vertical-align:-5px;overflow:hidden}.a2a-team-timeline__agent-avatar .a2a-group-chat__brand-avatar{width:78%!important;height:78%!important;max-width:78%!important;max-height:78%!important}.a2a-team-timeline__content b{display:inline;color:#314b64;font-size:13px;line-height:1.4}.a2a-team-timeline__state{display:inline-block;margin:0 0 0 7px;padding:2px 7px;border-radius:99px;background:#e9eef3;color:#617586;font-size:10px;font-weight:800;line-height:1.25;vertical-align:1px}.a2a-team-timeline__step--working .a2a-team-timeline__state{background:#eee8ff;color:#5d42ae}.a2a-team-timeline__step--completed .a2a-team-timeline__state{background:#e3f4ea;color:#19734c}.a2a-team-timeline__content p{margin:5px 0 0;color:#425f79;font-size:12px;line-height:1.45}.a2a-team-timeline__step-details{margin:8px 0 0;border-top:1px solid #e5edf2;color:#4b6276;font-size:11px;line-height:1.45}.a2a-team-timeline__step-details summary{padding:7px 0 0;color:#4c6378;font-size:11px;font-weight:800;cursor:pointer}.a2a-team-timeline__step-details>div{padding:7px 0 1px}.a2a-team-timeline__step-details p{margin:0}.a2a-team-timeline__step-details p+p{margin-top:5px}
+    .a2a-dual-chat-layout>.a2a-chat-shell:first-child .a2a-group-chat__messages{height:680px!important;min-height:680px!important;max-height:680px!important;flex:0 0 680px!important}@media(max-width:900px){.a2a-dual-chat-layout>.a2a-chat-shell:first-child .a2a-group-chat__messages{height:560px!important;min-height:560px!important;max-height:560px!important;flex-basis:560px!important}}@media(max-width:700px){.a2a-team-timeline__step{padding-left:26px}.a2a-team-timeline__content{padding:9px 10px}.a2a-team-timeline__content p{font-size:12px}}
+    """
     with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
         gr.HTML(
             "<div id=\"a2a-page-toolbar\">"
@@ -2441,16 +2669,6 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
         harness_analyse_button = gr.Button(
             "실행 로그로 개선안 만들기",
             elem_id="a2a-harness-analyse",
-            elem_classes=["a2a-hidden-chat-action"],
-        )
-        harness_run_button = gr.Button(
-            "Harness² 비교 실행",
-            elem_id="a2a-harness-run",
-            elem_classes=["a2a-hidden-chat-action"],
-        )
-        harness_adopt_button = gr.Button(
-            "선택·의견 반영",
-            elem_id="a2a-harness-adopt",
             elem_classes=["a2a-hidden-chat-action"],
         )
         harness_apply_button = gr.Button(

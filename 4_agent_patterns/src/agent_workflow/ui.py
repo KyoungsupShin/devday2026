@@ -9,7 +9,7 @@ from typing import Any
 
 import gradio as gr
 import mistune
-from lab_common.config import Settings, load_settings
+from .lesson_support.config import Settings, load_settings
 
 from .food_agents import FOOD_AGENT_DEFINITIONS
 from .lab_core import run_workflow_stream

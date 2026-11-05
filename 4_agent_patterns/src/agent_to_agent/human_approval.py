@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import requests
-from lab_common.config import Settings
+from .lesson_support.config import Settings
 
 HUMAN_APPROVAL_TOOL_NAME = "request_human_email_approval"
 _MAX_SUBJECT_LENGTH = 180

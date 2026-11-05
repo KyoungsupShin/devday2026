@@ -1,0 +1,3 @@
+lookback_duration: '24h'
+sampling_rate: 0.5
+cron_schedule: '0 2 * * *'

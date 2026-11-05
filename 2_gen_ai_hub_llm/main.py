@@ -7,12 +7,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT / "1_gen_ai_hub" / "src"), str(Path(__file__).resolve().parent)]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lab_common.config import load_settings
+from src.prompt_model.lesson_support.config import load_settings
 from src.reranker.lab_core import run_decision_recommendation
 from src.prompt_model.lab_core import compare_prompts, run_chat
 from src.embeddings.lab_core import compare_embeddings
+from src.embedding_reranker.lab_core import run_embedding_reranker_comparison
 from src.business_embedding.lab_core import load_business_cases, run_business_embedding_lab
 
 
@@ -30,6 +31,14 @@ def main() -> None:
     embedding.add_argument("--model", default=None, help="Embedding model (defaults to EMBED_MODEL)")
     decision = commands.add_parser("decision", help="03: make a reranker recommendation")
     decision.add_argument("case", nargs="?", default="인증된 고객이 일반적인 단일 주문을 시도했다.")
+    embedding_reranker = commands.add_parser(
+        "embedding-reranker", help="05: compare embedding retrieval and reranking"
+    )
+    embedding_reranker.add_argument(
+        "case", nargs="?",
+        default="인증된 고객이 1분에 6회 주문을 시도했습니다. 중복 주문, 결제 실패, 한도 초과, 자동화 정황은 없습니다.",
+    )
+    embedding_reranker.add_argument("--top-k", type=int, default=4)
     business_embedding = commands.add_parser("business-embedding", help="04: cluster cases and recommend a business queue")
     business_embedding.add_argument(
         "--ticket",
@@ -53,6 +62,11 @@ def main() -> None:
         print(json.dumps(compare_embeddings(args.texts, settings, model=args.model), ensure_ascii=False, indent=2))
     elif args.command == "decision":
         print(json.dumps(run_decision_recommendation(args.case, settings=settings), ensure_ascii=False, indent=2))
+    elif args.command == "embedding-reranker":
+        print(json.dumps(
+            run_embedding_reranker_comparison(args.case, settings=settings, top_k=args.top_k),
+            ensure_ascii=False, indent=2,
+        ))
     else:
         cases = load_business_cases()
         outcome = run_business_embedding_lab(

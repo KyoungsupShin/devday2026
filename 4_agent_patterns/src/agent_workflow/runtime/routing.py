@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import requests
-from lab_common.ai_core import api_headers, list_running_deployments
-from lab_common.config import Settings
-from lab_common.models import Candidate, RankedCandidate, RouteDecision
+from ..lesson_support.ai_core import api_headers, list_running_deployments
+from ..lesson_support.config import Settings
+from ..lesson_support.models import Candidate, RankedCandidate, RouteDecision
 
 from ..prompts import routing_candidate
 

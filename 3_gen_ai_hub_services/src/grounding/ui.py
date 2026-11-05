@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from lab_common.config import load_settings, save_grounding_repository_id
-from lab_common.grounding_repository import delete_document, list_documents, upload_text_document
+from .lesson_support.config import load_settings, save_grounding_repository_id
+from .lesson_support.grounding_repository import delete_document, list_documents, upload_text_document
 
 from .lab_core import run_vector_grounded_query_with_trace
 from .object_storage import ObjectStorageConfig, upload_markdown_to_object_storage_and_grounding
@@ -157,7 +157,7 @@ def build_grounding_ui():
             with gr.Tab("Direct upload"):
                 gr.Markdown(
                     "UTF-8 `.txt` 또는 `.md` SOP 문서를 vector repository에 직접 인덱싱합니다. "
-                    "예제: `data/context/interdepartmental_collaboration_sop.md`"
+                    "예제: `data/context/collaboration_sop.md`"
                 )
                 direct_file = gr.File(label="문서 파일", file_types=[".txt", ".md"], type="filepath")
                 direct_button = gr.Button("문서 업로드", variant="primary")
