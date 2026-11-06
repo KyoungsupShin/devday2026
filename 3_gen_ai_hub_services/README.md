@@ -14,6 +14,7 @@ Orchestration, Grounding, RPT 서비스를 확인하는 단계입니다.
 | Orchestration | AI Core 인증 정보와 실행 가능한 orchestration deployment |
 | Grounding | `GROUNDING_REPOSITORY_ID` |
 | SAP RPT risk classification | AI Core 인증 정보와 RUNNING `RPT_MODEL=sap-rpt-1.5-large` deployment |
+| SAP RPT Decision API | `SAP_RPT_API_KEY` |
 | 고정 deployment 사용 | 선택적으로 `AICORE_ORCHESTRATION_DEPLOYMENT_URL` |
 | Object Storage 연계 | 선택적으로 Object Storage 접속 정보와 bucket |
 
@@ -61,6 +62,6 @@ Orchestration, Grounding, RPT 순으로 실행하세요. RPT는 읽기 전용 �
 - Orchestration 응답과 Grounding 문서 근거를 확인합니다.
 - RPT 결과는 교육용 데이터로 검토합니다.
 
-테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.
+CLI 실행 명령은 위의 RPT 예시를 사용하고, 공통 설치와 JupyterLab 실행은 [루트 README](../README.md)를 따릅니다.
 
 </details>

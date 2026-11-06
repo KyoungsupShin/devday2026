@@ -38,6 +38,11 @@ AI Core 연결과 기본 LLM 호출을 확인하는 단계입니다.
 
 - 실행 가능한 deployment와 기본 LLM 응답을 확인합니다.
 
-테스트와 실행 명령은 [루트 README](../README.md)의 검증 안내를 따르세요.
+필요하면 저장소 루트에서 아래 CLI로 연결 상태와 실행 가능한 deployment를 다시 확인할 수 있습니다.
+
+```bash
+.venv/bin/python 1_gen_ai_hub/main.py status
+.venv/bin/python 1_gen_ai_hub/main.py deployments
+```
 
 </details>

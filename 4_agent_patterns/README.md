@@ -82,6 +82,6 @@
 <details>
 <summary><strong>✅ 이 단계의 완료 기준</strong></summary>
 
-각 Agent 패턴이 제어 흐름, 도구 권한, 조직 경계를 어떻게 다르게 다루는지 설명할 수 있어야 합니다. 테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.
+각 Agent 패턴이 제어 흐름, 도구 권한, 조직 경계를 어떻게 다르게 다루는지 설명할 수 있어야 합니다. 공통 설치와 JupyterLab 실행은 [루트 README](../README.md)를 따르고, A2A 서버 명령은 위의 준비 절차를 사용합니다.
 
 </details>

@@ -27,9 +27,8 @@ Prompt, Embedding, Reranking 결과를 비교하는 단계입니다.
 | 노트북 | 무엇을 하나요? | 확인할 결과 |
 | --- | --- | --- |
 | [01_prompt_and_model.ipynb](notebooks/01_prompt_and_model.ipynb) | system prompt와 user prompt를 바꾸며 응답을 비교합니다. | 지시 조건이 응답 형식·톤·근거 제시에 미치는 영향을 설명합니다. |
-| [02_embeddings.ipynb](notebooks/02_embeddings.ipynb) | 텍스트를 벡터로 변환하고 cosine similarity를 계산합니다. | 유사도 수치와 문장 의미가 항상 일치하지 않을 수 있음을 확인합니다. |
-| [03_embedding_advanced.ipynb](notebooks/03_embedding_advanced.ipynb) | 비즈니스 문의를 군집화하고 label-aware adapter를 적용합니다. | 라벨별 재가중이 도메인 분류 관점에 주는 영향을 확인합니다. |
-| [04_reranker_decision_model.ipynb](notebooks/04_reranker_decision_model.ipynb) | 교육용 정책 후보를 다시 정렬하고 score·margin을 비교합니다. | 낮은 신뢰도 또는 작은 margin을 `manual-review`로 처리하는 기준과 개선안을 이해합니다. |
+| [02_embeddings_model.ipynb](notebooks/02_embeddings_model.ipynb) | 텍스트를 벡터로 변환하고 cosine similarity를 계산합니다. | 유사도 수치와 문장 의미가 항상 일치하지 않을 수 있음을 확인합니다. |
+| [03_reranker_model.ipynb](notebooks/03_reranker_model.ipynb) | 교육용 정책 후보를 다시 정렬하고 score·margin을 비교합니다. | 낮은 신뢰도 또는 작은 margin을 `manual-review`로 처리하는 기준과 개선안을 이해합니다. |
 
 노트북은 Prompt, Embedding, Reranking 순으로 진행하세요.
 
@@ -49,6 +48,12 @@ Prompt, Embedding, Reranking 결과를 비교하는 단계입니다.
 <details>
 <summary><strong>✅ 이 단계의 완료 기준</strong></summary>
 
-Prompt, similarity, reranker score의 차이를 확인합니다. 테스트와 실행 명령은 [루트 README](../README.md)를 따릅니다.
+Prompt, similarity, reranker score의 차이를 확인합니다. 필요하면 저장소 루트에서 아래 CLI로 각 결과를 다시 확인할 수 있습니다.
+
+```bash
+.venv/bin/python 2_gen_ai_hub_llm/main.py prompt
+.venv/bin/python 2_gen_ai_hub_llm/main.py embedding
+.venv/bin/python 2_gen_ai_hub_llm/main.py decision
+```
 
 </details>

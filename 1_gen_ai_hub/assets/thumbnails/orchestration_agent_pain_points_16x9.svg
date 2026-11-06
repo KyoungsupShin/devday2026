@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Orchestration Agent Pain Points</title>
+  <desc id="desc">Five orchestration-agent pain points mapped to their solutions in a 16 by 9 layout.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbf8ff"/>
+      <stop offset="100%" stop-color="#f0e8ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-20%" width="120%" height="150%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#6f4a9e" flood-opacity="0.12"/></filter>
+    <style>
+      .heading{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-weight:700;fill:#143666}.body{font-family:Arial,'Apple SD Gothic Neo',sans-serif;fill:#62458d}.eyebrow{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-size:14px;font-weight:800;letter-spacing:1.5px;fill:#8757ae}.pain{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-size:25px;font-weight:700;fill:#143666}.solution{font-family:Arial,'Apple SD Gothic Neo',sans-serif;font-size:25px;font-weight:700;fill:#4f2f72}.number{font-family:Arial,sans-serif;font-size:23px;font-weight:800;fill:#fff}
+    </style>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#background)"/>
+  <rect x="58" y="48" width="164" height="48" rx="24" fill="#7844aa"/>
+  <text x="140" y="80" text-anchor="middle" class="number" font-size="18">SUMMARY</text>
+  <text x="58" y="160" class="heading" font-size="48">Orchestration Agent Pain Points</text>
+  <text x="58" y="205" class="body" font-size="23">Orchestration Agent의 핵심 과제와 BAIP · Joule Studio 기반 솔루션을 연결합니다.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="58" y="250" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="400" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="550" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="700" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="850" width="1804" height="132" rx="18" fill="#fff"/>
+  </g>
+  <g>
+    <circle cx="120" cy="316" r="30" fill="#7844aa"/><text x="120" y="324" text-anchor="middle" class="number">1</text><text x="180" y="299" class="eyebrow">PAIN POINT</text><text x="180" y="338" class="pain">Orchestration Delegation 판단</text><text x="986" y="332" text-anchor="middle" class="body" font-size="43">→</text><text x="1060" y="299" class="eyebrow">SOLUTION</text><text x="1060" y="338" class="solution">RPT Decision Route</text><rect x="1324" y="307" width="86" height="28" rx="14" fill="#efe4ff"/><text x="1367" y="326" text-anchor="middle" class="body" font-size="13" font-weight="800" fill="#6b3a96">GA 예정</text>
+    <circle cx="120" cy="466" r="30" fill="#7844aa"/><text x="120" y="474" text-anchor="middle" class="number">2</text><text x="180" y="449" class="eyebrow">PAIN POINT</text><text x="180" y="488" class="pain">Orchestration Delegation 정확도</text><text x="986" y="482" text-anchor="middle" class="body" font-size="43">→</text><text x="1060" y="449" class="eyebrow">SOLUTION</text><text x="1060" y="488" class="solution">Agent with ReAct CoT</text>
+    <circle cx="120" cy="616" r="30" fill="#7844aa"/><text x="120" y="624" text-anchor="middle" class="number">3</text><text x="180" y="599" class="eyebrow">PAIN POINT</text><text x="180" y="638" class="pain">Orchestration Delegation 근거</text><text x="986" y="632" text-anchor="middle" class="body" font-size="43">→</text><text x="1060" y="599" class="eyebrow">SOLUTION</text><text x="1060" y="638" class="solution">BAIP Grounding</text>
+    <circle cx="120" cy="766" r="30" fill="#7844aa"/><text x="120" y="774" text-anchor="middle" class="number">4</text><text x="180" y="749" class="eyebrow">PAIN POINT</text><text x="180" y="788" class="pain">Orchestration Delegation 거버넌스</text><text x="986" y="782" text-anchor="middle" class="body" font-size="43">→</text><text x="1060" y="749" class="eyebrow">SOLUTION</text><text x="1060" y="788" class="solution" font-size="23">Joule Studio &amp; Agent Gateway</text>
+    <circle cx="120" cy="916" r="30" fill="#7844aa"/><text x="120" y="924" text-anchor="middle" class="number">5</text><text x="180" y="899" class="eyebrow">PAIN POINT</text><text x="180" y="938" class="pain">SubAgent Context</text><text x="986" y="932" text-anchor="middle" class="body" font-size="43">→</text><text x="1060" y="899" class="eyebrow">SOLUTION</text><text x="1060" y="938" class="solution" font-size="23">Managed Joule Assistant &amp; Agent</text>
+  </g>
+</svg>
