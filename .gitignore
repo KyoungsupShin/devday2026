@@ -62,3 +62,6 @@ results/
 
 
 *.mp4
+
+# Keep the local harness workspace entirely out of Git.
+/5_harness/
