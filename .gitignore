@@ -61,6 +61,20 @@ results/
 **/.DS_Store
 
 
+# === 발표·문서 산출물 ===
+# 원본 슬라이드/문서는 별도 공유 경로에서 관리합니다.
+*.ppt
+*.pptx
+*.pps
+*.ppsx
+*.pot
+*.potx
+*.key
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
 *.mp4
 
 # Keep the local harness workspace entirely out of Git.
