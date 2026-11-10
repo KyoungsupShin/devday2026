@@ -63,6 +63,7 @@ results/
 
 # === 발표·문서 산출물 ===
 # 원본 슬라이드/문서는 별도 공유 경로에서 관리합니다.
+/presentation/
 *.ppt
 *.pptx
 *.pps
