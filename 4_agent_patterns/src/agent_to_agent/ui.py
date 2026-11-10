@@ -22,6 +22,7 @@ from .catalog import (
 from .history import persist_a2a_conversation, persist_human_approval_action
 from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
+from .prompts import get_prompt
 from .tools import schemas_for_tool_ids
 
 
@@ -316,18 +317,16 @@ def _subagent_tool_html(subagent_label: str) -> str:
     schemas = schemas_for_tool_ids(tool_ids)
     if not schemas:
         return (
-            '<span class="a2a-topology__no-tool">연동 Tool 없음 · LLM 분석 전용</span>'
+            '<span class="a2a-topology__no-tool">LLM 분석</span>'
         )
 
     cards = []
     for schema in schemas:
         function = schema.get("function", {})
         name = str(function.get("name", "Tool"))
-        description = str(function.get("description", ""))
         cards.append(
             '<article class="a2a-topology__tool">'
             f"<code>{html.escape(name)}</code>"
-            f"<span>{html.escape(description)}</span>"
             "</article>"
         )
     return "".join(cards)
@@ -342,22 +341,29 @@ def _agent_card_modal_html() -> str:
         selected = index == 0
         subagents = []
         for subagent_label in team["sub_agents"]:
+            subagent = SUBAGENT_BY_LABEL.get(subagent_label, {})
+            responsibility = str(subagent.get("responsibility", ""))
+            prompt_key = subagent.get("role_prompt_key")
+            system_prompt = get_prompt(str(prompt_key)) if prompt_key else ""
             subagents.append(
                 '<li class="a2a-topology__subagent">'
                 '<div class="a2a-topology__node-label">'
                 f"<b>Sub-agent · {html.escape(subagent_label)}</b>"
                 "</div>"
+                f'<p class="a2a-topology__responsibility">{html.escape(responsibility)}</p>'
                 '<div class="a2a-topology__tools">'
-                '<span class="a2a-topology__tools-label">사용 가능 Tool</span>'
                 f"{_subagent_tool_html(subagent_label)}"
-                "</div></li>"
+                "</div>"
+                '<details class="a2a-topology__prompt">'
+                "<summary>시스템 프롬프트</summary>"
+                f"<div>{html.escape(system_prompt)}</div>"
+                "</details></li>"
             )
         team_buttons.append(
             '<button type="button" class="a2a-topology__team-select" '
             f'data-a2a-team-select="{html.escape(team_id)}" '
             f'aria-selected="{str(selected).lower()}">'
             f"<b>{html.escape(team['agent_label'])}</b>"
-            f"<span>{html.escape(team['description'])}</span>"
             "</button>"
         )
         team_panels.append(
@@ -366,10 +372,8 @@ def _agent_card_modal_html() -> str:
             f"{' hidden' if not selected else ''}>"
             '<header class="a2a-topology__team-header">'
             f"<span>Team Agent</span><b>{html.escape(team['agent_label'])}</b>"
-            f"<code>{html.escape(team['agent_id'])}</code>"
             "</header>"
-            f"<p>{html.escape(team['description'])}</p>"
-            '<div class="a2a-topology__subagent-heading">Sub-agent와 역할별 Tool</div>'
+            '<div class="a2a-topology__subagent-heading">Sub-agent · 연결 Tool</div>'
             f'<ul class="a2a-topology__subagents">{"".join(subagents)}</ul>'
             "</section>"
         )
@@ -380,7 +384,7 @@ def _agent_card_modal_html() -> str:
         "<div><span>03 · 기본 A2A 카드</span><h2>조직 Team · Sub-agent · Tool</h2></div>"
         '<button type="button" data-a2a-modal-close aria-label="닫기">×</button>'
         "</header>"
-        '<p class="a2a-topology__intro">이 목록은 03 기본 A2A 실습 전용 Card입니다. Team Agent는 LLM으로 필요한 Sub-agent를 선택하고, Tool은 표시된 역할에서만 선택적으로 호출됩니다. 04 Advanced 실습의 Codex 통합 Agent는 이 목록에 포함되지 않습니다.</p>'
+        '<p class="a2a-topology__intro">Team을 선택해 Sub-agent와 연결 Tool을 확인하세요.</p>'
         '<div class="a2a-topology__layout">'
         f'<aside class="a2a-topology__sidebar">{"".join(team_buttons)}</aside>'
         f'<main class="a2a-topology__detail">{"".join(team_panels)}</main>'
@@ -2068,6 +2072,9 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     """
     css += """
     .a2a-group-chat__messages{height:680px!important}@media(max-width:700px){.a2a-group-chat__messages{height:560px!important}}
+    """
+    css += """
+    .a2a-topology__responsibility{margin:5px 0 0;color:#667b90;font-size:11px;line-height:1.4}.a2a-topology__prompt{margin-top:8px;border-top:1px solid #e5edf2;padding-top:7px}.a2a-topology__prompt summary{color:#587086;font-size:10px;font-weight:800;cursor:pointer}.a2a-topology__prompt[open] summary{margin-bottom:6px}.a2a-topology__prompt div{color:#52697d;font-size:10px;line-height:1.45;white-space:pre-wrap}
     """
     with gr.Blocks(title="F&B LLM Orchestration A2A", css=css, theme=LIGHT_THEME) as app:
         gr.HTML(

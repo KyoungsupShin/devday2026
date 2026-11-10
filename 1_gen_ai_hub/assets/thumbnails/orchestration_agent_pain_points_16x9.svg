@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
-  <title id="title">Orchestration Agent Pain Points</title>
-  <desc id="desc">Five orchestration-agent pain points mapped to their solutions in a 16 by 9 layout.</desc>
+  <title id="title">Orchestration Agent Key Points</title>
+  <desc id="desc">Five orchestration-agent key points mapped to their solutions in a 16 by 9 layout.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#fbf8ff"/>
@@ -14,8 +14,8 @@
   <rect width="1920" height="1080" fill="url(#background)"/>
   <rect x="58" y="48" width="164" height="48" rx="24" fill="#7844aa"/>
   <text x="140" y="80" text-anchor="middle" class="number" font-size="18">SUMMARY</text>
-  <text x="58" y="160" class="heading" font-size="48">Orchestration Agent Pain Points</text>
-  <text x="58" y="205" class="body" font-size="23">Orchestration Agent의 핵심 과제와 BAIP · Joule Studio 기반 솔루션을 연결합니다.</text>
+  <text x="58" y="160" class="heading" font-size="48">Orchestration Agent Key Points</text>
+  <text x="58" y="205" class="body" font-size="23">Orchestration Agent의 핵심 고려 사항과 BAIP · Joule Studio 기반 솔루션을 연결합니다.</text>
 
   <g filter="url(#shadow)">
     <rect x="58" y="250" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="400" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="550" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="700" width="1804" height="132" rx="18" fill="#fff"/><rect x="58" y="850" width="1804" height="132" rx="18" fill="#fff"/>

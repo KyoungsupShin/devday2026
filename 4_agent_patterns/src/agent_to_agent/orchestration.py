@@ -702,6 +702,62 @@ def _orchestrator_decision(
     )[0]
 
 
+def run_first_react_turn(
+    request: str = DEFAULT_REQUEST,
+    settings: Settings | None = None,
+    agent_urls: dict[str, str] | None = None,
+    prompt_namespace: str = "orchestration",
+) -> list[dict[str, Any]]:
+    """Run only the first public Observe → Act → Decide turn.
+
+    This compact notebook helper deliberately stops before an A2A Team Task is
+    sent. It makes the Orchestration Agent's initial, auditable decision visible
+    without waiting for the complete multi-Team workflow.
+    """
+    if not isinstance(request, str) or not request.strip():
+        raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
+    request = request.strip()
+    configured_settings = settings or load_settings()
+    cards = run_sync(discover_cards(resolve_agent_urls(agent_urls)))
+    grounding = no_grounding_requested()
+    observation = _orchestration_observation(
+        configured_settings,
+        request,
+        [],
+        cards,
+        grounding,
+        prompt_namespace=prompt_namespace,
+    )
+    decision, grounding = _orchestrator_turn(
+        configured_settings,
+        request,
+        [],
+        cards,
+        grounding,
+        observation=observation,
+        prompt_namespace=prompt_namespace,
+    )
+    events: list[dict[str, Any]] = [
+        {
+            "step": "field_handoff",
+            "handoff": {
+                "source_agent_id": "field-agent",
+                "target_agent_id": "orchestration-agent",
+                "purpose": "field_incident_handoff",
+                "request": request,
+            },
+        },
+        {"step": "observation", "step_number": 1, "observation": observation},
+    ]
+    events.extend(
+        {"step": "grounding", "audit": grounding_audit(search["result"])}
+        for search in grounding["searches"]
+        if isinstance(search, dict) and isinstance(search.get("result"), dict)
+    )
+    events.append({"step": "decision", "step_number": 1, "decision": decision})
+    return events
+
+
 async def _run_async(
     request: str,
     settings: Settings,
