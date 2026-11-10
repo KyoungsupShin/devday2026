@@ -1,27 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="720" viewBox="0 0 1600 720">
-  <rect width="1600" height="720" rx="28" fill="#f7faff"/>
-  <rect x="42" y="36" width="1516" height="648" rx="18" fill="#ffffff" stroke="#dbe7f8" stroke-width="2"/>
-  <text x="84" y="94" font-family="Arial, sans-serif" font-size="31" font-weight="700" fill="#173f77">SAP RPT Decision API · A2A Coordinator</text>
-  <text x="84" y="188" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#344054">주문 예외 task state</text>
-  <rect x="84" y="205" width="1210" height="105" rx="10" fill="#ffffff" stroke="#b9cce5" stroke-width="2"/>
-  <text x="108" y="246" font-family="Arial, sans-serif" font-size="20" fill="#344054">대량 주문의 배송 지연으로 고객 불만이 접수되었습니다.</text>
-  <text x="108" y="280" font-family="Arial, sans-serif" font-size="20" fill="#344054">재고와 출고 가능 여부를 확인한 뒤 고객에게 안내가 필요합니다.</text>
-  <rect x="1320" y="232" width="196" height="52" rx="9" fill="#ffffff" stroke="#98a2b3" stroke-width="2"/>
-  <text x="1349" y="266" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#475467">판단 후보 설정</text>
-  <rect x="84" y="334" width="205" height="52" rx="9" fill="#1a73e8"/>
-  <text x="127" y="368" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#ffffff">Coordinator 판단</text>
-  <text x="84" y="438" font-family="Arial, sans-serif" font-size="20" font-weight="700" fill="#344054">Coordinator 판단 결과</text>
-  <g font-family="Arial, sans-serif">
-    <rect x="84" y="458" width="340" height="126" rx="12" fill="#f6faff" stroke="#d5e6fb"/>
-    <circle cx="116" cy="493" r="10" fill="#1a73e8"/><text x="139" y="500" font-size="17" fill="#52657d">다음 A2A Agent</text><text x="108" y="551" font-size="28" font-weight="700" fill="#173f77">SCM Agent</text>
-    <rect x="448" y="458" width="340" height="126" rx="12" fill="#fff7f7" stroke="#f6d7d9"/>
-    <circle cx="480" cy="493" r="10" fill="#e5484d"/><text x="503" y="500" font-size="17" fill="#52657d">Handoff 방식</text><text x="472" y="551" font-size="28" font-weight="700" fill="#9f1d22">근거 요청</text>
-    <rect x="812" y="458" width="340" height="126" rx="12" fill="#fbf7ff" stroke="#e9d9fb"/>
-    <circle cx="844" cy="493" r="10" fill="#9334e6"/><text x="867" y="500" font-size="17" fill="#52657d">운영 위험</text><text x="836" y="551" font-size="28" font-weight="700" fill="#6921a9">중간</text>
-    <rect x="1176" y="458" width="340" height="126" rx="12" fill="#fff9f1" stroke="#fae4c4"/>
-    <circle cx="1208" cy="493" r="10" fill="#e37400"/><text x="1231" y="500" font-size="17" fill="#52657d">처리 우선순위</text><text x="1200" y="551" font-size="28" font-weight="700" fill="#a44d00">오늘</text>
-  </g>
-  <rect x="84" y="610" width="1432" height="50" rx="9" fill="#f8fafc" stroke="#dbe3ed"/>
-  <text x="108" y="642" font-family="Arial, sans-serif" font-size="17" font-weight="700" fill="#52657d">RPT에 전달된 English task state</text>
-  <text x="438" y="642" font-family="Arial, sans-serif" font-size="17" fill="#344054">Shipping delay escalation · inventory and fulfillment evidence required</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120">
+<style>.title{font:700 35px Arial,sans-serif;fill:#202124}.label{font:500 20px Arial,sans-serif;fill:#6b7280}.input{font:600 18px Arial,sans-serif;fill:#30343a}.section{font:700 25px Arial,sans-serif;fill:#29466e}.heading{font:700 20px Arial,sans-serif;fill:#29466e}.axis{font:500 16px Arial,sans-serif;fill:#29466e}.pct{font:700 16px Arial,sans-serif;fill:#fff}.darkpct{font:700 16px Arial,sans-serif;fill:#29466e}</style>
+<rect width="1600" height="1120" fill="#fff"/><text x="38" y="58" class="title">SAP RPT Decision API · A2A Coordinator</text>
+<rect x="36" y="96" width="1010" height="270" rx="8" fill="#fff" stroke="#d9dde5" stroke-width="2"/><text x="58" y="138" class="label">주문 예외 task state</text><rect x="58" y="158" width="966" height="186" rx="8" fill="#f4f4f6"/><text x="78" y="202" class="input">주문 PO-1042의 납품 예정일이 지났지만 입고되지 않았습니다. 생산 라인이 오늘 멈출 수 있으니 공급망</text><text x="78" y="233" class="input">현황과 새 납기일을 확인해 주세요.</text>
+<rect x="1074" y="96" width="488" height="122" rx="10" fill="#e6e7eb"/><text x="1318" y="168" text-anchor="middle" class="input">판단 후보 설정</text><rect x="1074" y="244" width="488" height="122" rx="10" fill="#347df0"/><text x="1318" y="318" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#fff">Coordinator 판단</text>
+<rect x="36" y="392" width="1526" height="680" rx="8" fill="#fff" stroke="#d9dde5" stroke-width="2"/><rect x="36" y="392" width="252" height="42" rx="8" fill="#fff" stroke="#d9dde5" stroke-width="2"/><text x="57" y="420" class="label">⌁   Coordinator 판단 결과</text><text x="68" y="476" class="section">Coordinator 판단 결과 · SAP RPT 후보 확률과 최종 선택</text>
+<rect x="52" y="520" width="770" height="348" rx="12" fill="#fbfdff" stroke="#dbe7f8" stroke-width="2"/><rect x="886" y="520" width="640" height="348" rx="12" fill="#fbfdff" stroke="#dbe7f8" stroke-width="2"/><rect x="52" y="954" width="770" height="104" rx="12" fill="#fbfdff" stroke="#dbe7f8" stroke-width="2"/><rect x="886" y="954" width="640" height="104" rx="12" fill="#fbfdff" stroke="#dbe7f8" stroke-width="2"/>
+<text x="72" y="548" class="heading">다음 A2A Agent · 최종 판단: SCM Agent · Supply Chain &amp; Logistics</text><text x="908" y="548" class="heading">Handoff 방식 · 최종 판단: 사람 승인 요청</text>
+<text x="175" y="616" class="axis">HR</text><rect x="206" y="582" width="136" height="68" fill="#d3d9e3"/><text x="274" y="623" text-anchor="middle" class="darkpct">27.0%</text><text x="160" y="716" class="axis">SCM</text><rect x="206" y="671" width="354" height="68" fill="#2875df"/><text x="540" y="713" text-anchor="end" class="pct">71.0%</text><text x="160" y="806" class="axis">R&amp;D</text><rect x="206" y="772" width="10" height="68" fill="#d3d9e3"/><text x="225" y="814" class="darkpct">2.0%</text>
+<text x="928" y="616" class="axis">즉시 위임</text><rect x="1025" y="582" width="38" height="68" fill="#d3d9e3"/><text x="1048" y="627" transform="rotate(-90 1048 627)" class="darkpct">8.0%</text><text x="928" y="716" class="axis">근거 요청</text><rect x="1025" y="671" width="24" height="68" fill="#d3d9e3"/><text x="1057" y="714" class="darkpct">5.0%</text><text x="928" y="806" class="axis">승인 요청</text><rect x="1025" y="772" width="456" height="68" fill="#e9454d"/><text x="1465" y="814" text-anchor="end" class="pct">87.0%</text>
+<text x="76" y="990" class="heading">운영 위험 · 최종 판단: 높음 · 생산·계약 영향</text><text x="910" y="990" class="heading">처리 우선순위 · 최종 판단: 미확정</text><rect x="76" y="1006" width="10" height="38" fill="#d3d9e3"/><text x="96" y="1032" class="axis">낮음</text><text x="150" y="1032" class="darkpct">2.0%</text><rect x="910" y="1006" width="10" height="38" fill="#d3d9e3"/><text x="930" y="1032" class="axis">대기</text><text x="985" y="1032" class="darkpct">2.0%</text>
 </svg>
