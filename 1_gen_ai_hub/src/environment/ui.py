@@ -107,6 +107,12 @@ def _gradio():
     return gr
 
 
+def _light_theme(gr):
+    base = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+    values = base.to_dict()["theme"]
+    return base.set(**{f"{name}_dark": value for name, value in values.items() if not name.endswith("_dark") and f"{name}_dark" in values})
+
+
 def read_environment_values(env_file: Path = ENV_PATH) -> dict[str, str]:
     """Read managed values from an env file without printing any secret."""
     if not env_file.is_file():
@@ -282,7 +288,7 @@ def build_configuration_ui():
     _activate(values)
     initial_statuses = environment_status(values, env_exists=env_exists)
 
-    with gr.Blocks(css=_STATUS_CSS, fill_width=True, title="Hands-on 환경 점검") as app:
+    with gr.Blocks(css=_STATUS_CSS, fill_width=True, title="Hands-on 환경 점검", theme=_light_theme(gr)) as app:
         with gr.Sidebar(open=True, width=290, position="left"):
             gr.Markdown("## 환경 설정")
             with gr.Column():

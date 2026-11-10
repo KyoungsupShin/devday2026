@@ -14,6 +14,16 @@ from .lesson_support.config import Settings, load_settings
 from .food_agents import FOOD_AGENT_DEFINITIONS
 from .lab_core import run_workflow_stream
 
+
+# Pair every Gradio dark token with its light equivalent, including chat bubbles.
+_BASE_THEME = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+_THEME_VALUES = _BASE_THEME.to_dict()["theme"]
+LIGHT_THEME = _BASE_THEME.set(**{
+    f"{name}_dark": value
+    for name, value in _THEME_VALUES.items()
+    if not name.endswith("_dark") and f"{name}_dark" in _THEME_VALUES
+})
+
 DEFAULT_WORKFLOW_REQUEST = (
     "편의점용 고단백 닭가슴살 도시락을 출시하려고 합니다. 판매가 4,500원, 단백질 30g 이상, "
     "전자레인지 조리 가능 조건으로 콘셉트·레시피·원가·공급망·식품안전·마케팅·손익분기점을 "
@@ -408,7 +418,7 @@ def build_workflow_ui(
             conversation.append({"role": "assistant", "content": _AGENT_MARKDOWN(answer)})
         yield "", conversation, next_history
 
-    with gr.Blocks(css=SETTINGS_MODAL_CSS) as app:
+    with gr.Blocks(css=SETTINGS_MODAL_CSS, theme=LIGHT_THEME) as app:
         with gr.Row(equal_height=True):
             with gr.Column(scale=8):
                 gr.Markdown(f"## {title}")

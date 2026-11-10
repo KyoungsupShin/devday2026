@@ -17,6 +17,15 @@ from .lab_core import (
 from .str_lab import SYNTHETIC_STR_DATABASE_RESULT, build_str_database_input
 
 
+_BASE_THEME = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+_THEME_VALUES = _BASE_THEME.to_dict()["theme"]
+LIGHT_THEME = _BASE_THEME.set(**{
+    f"{name}_dark": value
+    for name, value in _THEME_VALUES.items()
+    if not name.endswith("_dark") and f"{name}_dark" in _THEME_VALUES
+})
+
+
 _DEFAULT_CANDIDATE_RESUME = dedent("""\
     John Doe
     1234 Data St, San Francisco, CA 94101
@@ -171,7 +180,7 @@ def build_orchestration_registry_ui() -> gr.Blocks:
             gr.Markdown(value="### Step 3 완료 — 다른 Orchestration을 사용하려면 Step 1부터 다시 진행하세요."),
         )
 
-    with gr.Blocks(title="BTP Orchestration Registry") as app:
+    with gr.Blocks(title="BTP Orchestration Registry", theme=LIGHT_THEME) as app:
         with gr.Sidebar(open=True, width=340, position="left"):
             gr.Markdown("## Orchestration 선택")
             gr.Markdown("Step 1 → 2 → 3 순서로 진행하세요. 이전 단계가 완료되기 전에는 다음 버튼이 비활성화됩니다.")

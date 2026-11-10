@@ -22,6 +22,16 @@ from .tools import (
     tool_catalog_for_food_agent,
 )
 
+
+# Pair every Gradio dark token with its light equivalent, including chat bubbles.
+_BASE_THEME = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+_THEME_VALUES = _BASE_THEME.to_dict()["theme"]
+LIGHT_THEME = _BASE_THEME.set(**{
+    f"{name}_dark": value
+    for name, value in _THEME_VALUES.items()
+    if not name.endswith("_dark") and f"{name}_dark" in _THEME_VALUES
+})
+
 DEFAULT_LOOP_REQUEST = (
     "편의점용 고단백 닭가슴살 도시락의 마케팅 출시안을 만들어주세요. 제품명은 ‘프로틴 런치’, "
     "타깃은 운동을 즐기는 20~30대 직장인입니다. 핵심 메시지·프로모션 문구·판매 채널을 "
@@ -685,7 +695,7 @@ def build_loop_ui(
             {"role": "assistant", "content": _final_answer_bubble(outcome)},
         ], next_history, active_marketing_html
 
-    with gr.Blocks(css=SETTINGS_MODAL_CSS) as app:
+    with gr.Blocks(css=SETTINGS_MODAL_CSS, theme=LIGHT_THEME) as app:
         with gr.Row(equal_height=True):
             with gr.Column(scale=8):
                 gr.Markdown(f"## {title}")

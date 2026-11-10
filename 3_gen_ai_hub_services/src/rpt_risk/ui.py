@@ -16,6 +16,12 @@ from .lab_core import (
     saved_rpt_holdout_scenarios,
 )
 
+
+def _light_theme(gr):
+    base = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+    values = base.to_dict()["theme"]
+    return base.set(**{f"{name}_dark": value for name, value in values.items() if not name.endswith("_dark") and f"{name}_dark" in values})
+
 def _evaluation_figures(outcome: dict[str, Any]) -> tuple[Any, Any]:
     """Create the holdout metric and confusion-matrix charts for the UI."""
     try:
@@ -201,7 +207,7 @@ def build_rpt_risk_ui() -> Any:
 
     preview = preview_risk_dataset()
     initial_rows = [{**row, "rpt_prediction": "대기", "rpt_confidence": "—"} for row in preview["rows"]]
-    with gr.Blocks(title="SAP RPT 신용위험 분류") as app:
+    with gr.Blocks(title="SAP RPT 신용위험 분류", theme=_light_theme(gr)) as app:
         gr.Markdown(
             "# SAP RPT 신용위험 분류\n"
             "교육용 데이터의 RPT 예측입니다. Holdout snapshot 저장은 명시적 실행과 `ALLOW_WRITE_TOOLS=true`가 필요하며, 자동 승인·거절은 수행하지 않습니다."

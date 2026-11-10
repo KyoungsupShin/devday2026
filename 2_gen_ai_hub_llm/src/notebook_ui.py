@@ -33,6 +33,17 @@ def _gradio():
     return gr
 
 
+def _light_theme(gr):
+    """Keep notebook-local Gradio UIs light regardless of OS appearance."""
+    base = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+    values = base.to_dict()["theme"]
+    return base.set(**{
+        f"{name}_dark": value
+        for name, value in values.items()
+        if not name.endswith("_dark") and f"{name}_dark" in values
+    })
+
+
 def _history_messages(history: list[Any] | None) -> list[dict[str, str]]:
     messages: list[dict[str, str]] = []
     for item in history or []:
@@ -240,7 +251,7 @@ def build_chat_ui(
     .react-timeline__content{min-height:0;padding:7px 10px;border:1px solid #d7e3eb;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(48,73,94,.05)}
     .react-timeline__title{color:#314b64;font-size:12px;font-weight:800}.react-timeline__content p{margin:3px 0 0;color:#25313d;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
     """
-    with gr.Blocks(css=modal_css, fill_width=True) as app:
+    with gr.Blocks(css=modal_css, fill_width=True, theme=_light_theme(gr)) as app:
         gr.Markdown(
             "# LLM Chatbot UI\n"
             "대화 내용은 현재 Jupyter session의 브라우저 UI에만 유지됩니다. prompt, 모델, 실행 방식은 ⚙️ 설정에서 바꿀 수 있습니다."
@@ -357,7 +368,7 @@ def build_embedding_reranker_comparison_ui(
                 {"error": f"{type(error).__name__}: {error}"},
             )
 
-    with gr.Blocks(fill_width=True) as app:
+    with gr.Blocks(fill_width=True, theme=_light_theme(gr)) as app:
         gr.Markdown(
             "# Embedding · Reranker 비교\n"
             "정책 후보를 찾는 Embedding 단계와, 찾은 후보를 다시 정렬하는 Reranker 단계를 비교합니다. "
@@ -501,7 +512,7 @@ def build_embedding_ui(comparison_cluster_runner: Callable[..., dict[str, Any]])
     #embedding-comparison-row { flex-wrap: nowrap !important; gap: 16px !important; }
     #embedding-comparison-row > * { min-width: 0 !important; }
     """
-    with gr.Blocks(css=layout_css, fill_width=True) as app:
+    with gr.Blocks(css=layout_css, fill_width=True, theme=_light_theme(gr)) as app:
         gr.Markdown(f"Embedding model: `{configured_model}` (`.env`의 `EMBED_MODEL`)")
         with gr.Row(equal_height=True, elem_id="embedding-comparison-row"):
             with gr.Column(scale=1, min_width=0):
@@ -658,7 +669,7 @@ def build_business_embedding_ui(
       .similarity-row { grid-template-columns: 95px 1fr 45px; gap: 7px; }
     }
     """
-    with gr.Blocks(css=layout_css, fill_width=True) as app:
+    with gr.Blocks(css=layout_css, fill_width=True, theme=_light_theme(gr)) as app:
         with gr.Column(elem_classes="business-routing"):
             gr.HTML(
                 '<div class="routing-header"><h1>업무 문의 라우팅</h1>'
@@ -914,7 +925,7 @@ def build_decision_reranker_ui(
     ) -> tuple[str, str, dict[str, Any]]:
         return render_outcome(decide(customer_behavior, min_margin, min_score))
 
-    with gr.Blocks(css=modal_css, fill_width=True) as app:
+    with gr.Blocks(css=modal_css, fill_width=True, theme=_light_theme(gr)) as app:
         with gr.Row(equal_height=True):
             with gr.Column(scale=9):
                 gr.Markdown(

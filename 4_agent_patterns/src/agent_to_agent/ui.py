@@ -24,6 +24,16 @@ from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
 from .tools import schemas_for_tool_ids
 
+
+# Pair every Gradio dark token with its light equivalent, including chat bubbles.
+_BASE_THEME = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+_THEME_VALUES = _BASE_THEME.to_dict()["theme"]
+LIGHT_THEME = _BASE_THEME.set(**{
+    f"{name}_dark": value
+    for name, value in _THEME_VALUES.items()
+    if not name.endswith("_dark") and f"{name}_dark" in _THEME_VALUES
+})
+
 _AVATAR_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets" / "brand"
 
 
@@ -1656,6 +1666,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
                 clean_request,
                 settings=settings,
                 conversation_history=conversation_history,
+                prompt_namespace="orchestration",
             ):
                 kind = event["type"]
                 if kind == "field_handoff_received":
@@ -2058,7 +2069,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     css += """
     .a2a-group-chat__messages{height:680px!important}@media(max-width:700px){.a2a-group-chat__messages{height:560px!important}}
     """
-    with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
+    with gr.Blocks(title="F&B LLM Orchestration A2A", css=css, theme=LIGHT_THEME) as app:
         gr.HTML(
             "<div id=\"a2a-page-toolbar\">"
             "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__reset\" data-a2a-chat-toolbar-action=\"reset\">채팅 초기화</button>"

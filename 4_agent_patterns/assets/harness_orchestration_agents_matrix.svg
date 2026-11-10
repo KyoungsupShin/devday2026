@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1794" height="410" viewBox="0 0 1794 410" role="img" aria-labelledby="title desc">
+  <title id="title">Harness Agent Orchestration and Agents ownership matrix</title>
+  <desc id="desc">Five Harness implementation options compared by orchestration and agent ownership.</desc>
+  <style>
+    .title { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 26px; font-weight: 700; fill: #0b2f5b; }
+    .subtitle { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 15px; fill: #4b6175; }
+    .header { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 17px; font-weight: 700; fill: #fff; }
+    .row { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 17px; font-weight: 700; fill: #263548; }
+    .cell-sap { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 15px; font-weight: 700; fill: #155842; }
+    .cell-customer { font-family: Arial, 'Apple SD Gothic Neo', sans-serif; font-size: 15px; font-weight: 700; fill: #93420c; }
+  </style>
+  <rect width="1794" height="410" fill="#fff"/>
+  <text x="18" y="39" class="title">Orchestration · Agents 책임 매트릭스</text>
+  <text x="18" y="66" class="subtitle">Harness 구현 방식별 오케스트레이션과 Agent 운영 주체를 분리해 비교합니다.</text>
+
+  <g transform="translate(18 94)">
+    <rect x="0" y="0" width="203" height="82" rx="5" fill="#273448"/>
+    <rect x="213" y="0" width="300" height="82" rx="5" fill="#273448"/>
+    <rect x="523" y="0" width="300" height="82" rx="5" fill="#273448"/>
+    <rect x="833" y="0" width="300" height="82" rx="5" fill="#273448"/>
+    <rect x="1143" y="0" width="300" height="82" rx="5" fill="#273448"/>
+    <rect x="1453" y="0" width="300" height="82" rx="5" fill="#273448"/>
+    <text x="18" y="48" class="header">평가 항목</text>
+    <text x="363" y="48" text-anchor="middle" class="header">A &#160;SAP Native</text>
+    <text x="673" y="48" text-anchor="middle" class="header">B &#160;Joule Studio</text>
+    <text x="983" y="48" text-anchor="middle" class="header">C &#160;3rd-party Agent</text>
+    <text x="1293" y="48" text-anchor="middle" class="header">D &#160;Custom Hybrid</text>
+    <text x="1603" y="48" text-anchor="middle" class="header">E &#160;Customer Native</text>
+
+    <rect x="0" y="94" width="203" height="89" rx="5" fill="#f0f2f5"/>
+    <rect x="213" y="94" width="300" height="89" rx="5" fill="#dceee7"/>
+    <rect x="523" y="94" width="300" height="89" rx="5" fill="#dceee7"/>
+    <rect x="833" y="94" width="300" height="89" rx="5" fill="#dceee7"/>
+    <rect x="1143" y="94" width="300" height="89" rx="5" fill="#fde3cf"/>
+    <rect x="1453" y="94" width="300" height="89" rx="5" fill="#fde3cf"/>
+    <text x="18" y="146" class="row">ORCHESTRATION</text>
+    <text x="363" y="146" text-anchor="middle" class="cell-sap">SAP</text>
+    <text x="673" y="146" text-anchor="middle" class="cell-sap">SAP</text>
+    <text x="983" y="146" text-anchor="middle" class="cell-sap">SAP</text>
+    <text x="1293" y="146" text-anchor="middle" class="cell-customer">CUSTOMER</text>
+    <text x="1603" y="146" text-anchor="middle" class="cell-customer">CUSTOMER</text>
+
+    <rect x="0" y="193" width="203" height="89" rx="5" fill="#f0f2f5"/>
+    <rect x="213" y="193" width="300" height="89" rx="5" fill="#dceee7"/>
+    <rect x="523" y="193" width="300" height="89" rx="5" fill="#dceee7"/>
+    <rect x="833" y="193" width="300" height="89" rx="5" fill="#dceee7"/>
+    <path d="M1143 198a5 5 0 0 1 5-5h145v89h-145a5 5 0 0 1-5-5z" fill="#dceee7"/>
+    <path d="M1293 193h145a5 5 0 0 1 5 5v79a5 5 0 0 1-5 5h-145z" fill="#fde3cf"/>
+    <rect x="1453" y="193" width="300" height="89" rx="5" fill="#fde3cf"/>
+    <text x="18" y="245" class="row">AGENTS</text>
+    <text x="363" y="245" text-anchor="middle" class="cell-sap">SAP MANAGED</text>
+    <text x="673" y="245" text-anchor="middle" class="cell-sap">SAP MANAGED + STUDIO</text>
+    <text x="983" y="245" text-anchor="middle" class="cell-sap">SAP MANAGED + 3RD PARTY</text>
+    <text x="1293" y="245" text-anchor="middle" class="cell-customer">SAP + CUSTOMER</text>
+    <text x="1603" y="245" text-anchor="middle" class="cell-customer">CUSTOMER · SAP DB</text>
+  </g>
+</svg>

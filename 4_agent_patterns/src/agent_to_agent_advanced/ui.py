@@ -34,6 +34,16 @@ from .human_approval import OutlookMailError, send_outlook_mail
 from .orchestration import list_agents, run_handoff_stream
 from .tools import schemas_for_tool_ids
 
+
+# Pair every Gradio dark token with its light equivalent, including chat bubbles.
+_BASE_THEME = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+_THEME_VALUES = _BASE_THEME.to_dict()["theme"]
+LIGHT_THEME = _BASE_THEME.set(**{
+    f"{name}_dark": value
+    for name, value in _THEME_VALUES.items()
+    if not name.endswith("_dark") and f"{name}_dark" in _THEME_VALUES
+})
+
 _AVATAR_ASSET_DIR = Path(__file__).resolve().parents[2] / "assets" / "brand"
 
 
@@ -2597,7 +2607,7 @@ def build_a2a_ui(settings: Settings | None = None) -> gr.Blocks:
     .a2a-team-timeline{margin:2px 0 0;padding:2px 0}.a2a-team-timeline ol{display:grid;gap:7px;margin:0;padding:0;list-style:none}.a2a-team-timeline__step{position:relative;min-width:0;padding:0 0 0 27px}.a2a-team-timeline__step:not(:last-child)::after{position:absolute;top:19px;bottom:-9px;left:9px;width:2px;background:#d6e2e9;content:""}.a2a-team-timeline__marker{position:absolute;z-index:1;top:8px;left:3px;width:14px;height:14px;border:3px solid #a8b9c6;border-radius:50%;background:#fff;box-shadow:0 0 0 3px #fff}.a2a-team-timeline__step--working .a2a-team-timeline__marker{border-color:#7956d6;background:#7956d6;box-shadow:0 0 0 3px #fff,0 0 0 6px rgba(121,86,214,.14)}.a2a-team-timeline__step--completed .a2a-team-timeline__marker{border-color:#2f9368;background:#2f9368}.a2a-team-timeline__step--completed .a2a-team-timeline__marker::after{display:block;color:#fff;content:"✓";font-size:10px;font-weight:900;line-height:14px;text-align:center}.a2a-team-timeline__content{min-height:0;padding:9px 11px;border:1px solid #d7e3eb;border-radius:9px;background:#fff;box-shadow:0 1px 2px rgba(48,73,94,.05)}.a2a-team-timeline__agent-avatar{display:inline-grid;place-items:center;width:19px;height:19px;margin:0 6px 0 0;border:1px solid #e1dcef;border-radius:50%;background:#fff;vertical-align:-5px;overflow:hidden}.a2a-team-timeline__agent-avatar .a2a-group-chat__brand-avatar{width:78%!important;height:78%!important;max-width:78%!important;max-height:78%!important}.a2a-team-timeline__content b{display:inline;color:#314b64;font-size:13px;line-height:1.4}.a2a-team-timeline__state{display:inline-block;margin:0 0 0 7px;padding:2px 7px;border-radius:99px;background:#e9eef3;color:#617586;font-size:10px;font-weight:800;line-height:1.25;vertical-align:1px}.a2a-team-timeline__step--working .a2a-team-timeline__state{background:#eee8ff;color:#5d42ae}.a2a-team-timeline__step--completed .a2a-team-timeline__state{background:#e3f4ea;color:#19734c}.a2a-team-timeline__content p{margin:5px 0 0;color:#425f79;font-size:12px;line-height:1.45}.a2a-team-timeline__step-details{margin:8px 0 0;border-top:1px solid #e5edf2;color:#4b6276;font-size:11px;line-height:1.45}.a2a-team-timeline__step-details summary{padding:7px 0 0;color:#4c6378;font-size:11px;font-weight:800;cursor:pointer}.a2a-team-timeline__step-details>div{padding:7px 0 1px}.a2a-team-timeline__step-details p{margin:0}.a2a-team-timeline__step-details p+p{margin-top:5px}
     .a2a-dual-chat-layout>.a2a-chat-shell:first-child .a2a-group-chat__messages{height:680px!important;min-height:680px!important;max-height:680px!important;flex:0 0 680px!important}@media(max-width:900px){.a2a-dual-chat-layout>.a2a-chat-shell:first-child .a2a-group-chat__messages{height:560px!important;min-height:560px!important;max-height:560px!important;flex-basis:560px!important}}@media(max-width:700px){.a2a-team-timeline__step{padding-left:26px}.a2a-team-timeline__content{padding:9px 10px}.a2a-team-timeline__content p{font-size:12px}}
     """
-    with gr.Blocks(title="F&B LLM Orchestration A2A", css=css) as app:
+    with gr.Blocks(title="F&B LLM Orchestration A2A", css=css, theme=LIGHT_THEME) as app:
         gr.HTML(
             "<div id=\"a2a-page-toolbar\">"
             "<button type=\"button\" class=\"a2a-chat-toolbar__button a2a-chat-toolbar__reset\" data-a2a-chat-toolbar-action=\"reset\">채팅 초기화</button>"

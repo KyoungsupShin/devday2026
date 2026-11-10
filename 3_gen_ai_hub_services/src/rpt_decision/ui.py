@@ -19,6 +19,12 @@ from .lab_core import (
 )
 
 
+def _light_theme(gr):
+    base = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+    values = base.to_dict()["theme"]
+    return base.set(**{f"{name}_dark": value for name, value in values.items() if not name.endswith("_dark") and f"{name}_dark" in values})
+
+
 def _candidate_scores(answer: dict[str, Any], candidates: dict[str, str]) -> list[float | None]:
     """Return API-provided candidate probabilities as percentages."""
     probabilities = answer.get("probabilities")
@@ -164,33 +170,34 @@ def build_rpt_decision_ui() -> Any:
     except ImportError as error:
         raise RuntimeError("gradio가 없습니다. requirements.txt를 설치하세요.") from error
 
-    def decide(state: str) -> tuple[Any, str]:
+    def decide(state: str) -> Any:
         if not state.strip():
             raise ValueError("주문 예외 task state를 입력하세요.")
         api_key = _decision_api_key()
         if not api_key:
             raise RuntimeError("프로젝트 루트 .env에 SAP_RPT_API_KEY를 설정한 뒤 UI 셀을 다시 실행하세요.")
         result = run_translated_rpt_decision(state, api_key)
-        return _decision_figure(result), result["translated_state"]
+        return _decision_figure(result)
 
-    with gr.Blocks(title="SAP RPT Decision API") as app:
-        gr.Markdown(
-            "# SAP RPT Decision API · A2A Coordinator\n"
-            "AI Core LLM이 한국어 task state를 영어로 의미 번역한 뒤, SAP RPT Decision API가 다음 A2A Agent, handoff 방식, 위험도와 우선순위를 판단합니다. "
-            "실제 Agent 호출이나 주문 변경을 수행하지 않습니다."
-        )
-        state = gr.Textbox(label="주문 예외 task state", value=DEFAULT_DECISION_STATE, lines=5)
-        with gr.Row():
-            run = gr.Button("Coordinator 판단", variant="primary")
-            settings = gr.Button("판단 후보 설정", variant="secondary", elem_id="rpt-decision-candidates-button")
+    with gr.Blocks(title="SAP RPT Decision API", theme=_light_theme(gr)) as app:
+        gr.Markdown("# SAP RPT Decision API · A2A Coordinator")
+        with gr.Row(equal_height=True):
+            state = gr.Textbox(
+                label="주문 예외 task state",
+                value=DEFAULT_DECISION_STATE,
+                lines=5,
+                scale=5,
+            )
+            with gr.Column(scale=1):
+                settings = gr.Button(
+                    "판단 후보 설정",
+                    variant="secondary",
+                    elem_id="rpt-decision-candidates-button",
+                )
+                run = gr.Button("Coordinator 판단", variant="primary")
         result = gr.Plot(label="Coordinator 판단 결과")
-        translated_state = gr.Textbox(
-            label="RPT에 전달된 English task state",
-            interactive=False,
-            lines=3,
-        )
         gr.HTML(_candidate_modal_markup())
-        run.click(decide, inputs=state, outputs=[result, translated_state])
+        run.click(decide, inputs=state, outputs=result)
         settings.click(
             fn=None,
             inputs=None,

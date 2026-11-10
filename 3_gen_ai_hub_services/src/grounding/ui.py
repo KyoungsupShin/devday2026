@@ -25,6 +25,12 @@ _UI_CSS = """
 _DEFAULT_SOP_QUESTION = "현장 작업자의 설비 부품 구매 요청은 어떤 순서로 검토해야 하나요?"
 
 
+def _light_theme(gr):
+    base = gr.themes.Base(primary_hue=gr.themes.colors.blue)
+    values = base.to_dict()["theme"]
+    return base.set(**{f"{name}_dark": value for name, value in values.items() if not name.endswith("_dark") and f"{name}_dark" in values})
+
+
 def _document_id(document: dict[str, Any]) -> str:
     value = document.get("id") or document.get("documentId")
     if value:
@@ -142,7 +148,7 @@ def build_grounding_ui():
         if not storage.missing_fields() else
         "미설정: " + ", ".join(storage.missing_fields()) + " (.env 또는 VCAP_SERVICES를 설정하세요.)"
     )
-    with gr.Blocks(css=_UI_CSS, title="Custom Repository Grounding") as app:
+    with gr.Blocks(css=_UI_CSS, title="Custom Repository Grounding", theme=_light_theme(gr)) as app:
         with gr.Sidebar(open=False, width=280, position="left"):
             gr.Markdown("## Repository")
             repository_input = gr.Textbox(label="Repository ID", value=default_repository_id, placeholder="Grounding Management 카드의 UUID")

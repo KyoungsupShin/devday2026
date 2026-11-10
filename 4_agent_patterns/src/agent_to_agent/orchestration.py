@@ -48,6 +48,66 @@ from .transport import (
 MAX_CONVERSATION_MESSAGES = 6
 MAX_CONVERSATION_CHARS = 6_000
 REQUEST_MODES = frozenset({"inform", "review", "draft", "action"})
+MAX_HANDOFFS_PER_REQUEST = 3
+MAX_ORCHESTRATION_STEPS = MAX_HANDOFFS_PER_REQUEST + 1
+MAX_MANUAL_SEARCHES_PER_REQUEST = 1
+MAX_TOOL_CALLS_PER_DECISION = 1
+MAX_DECISION_ARTIFACT_CHARS = 1_800
+MAX_DECISION_ARTIFACT_FIELD_CHARS = 360
+
+
+def _truncate_decision_text(value: Any, limit: int = MAX_DECISION_ARTIFACT_FIELD_CHARS) -> str:
+    """Bound one public evidence field without changing the source artifact."""
+    if not isinstance(value, str):
+        return ""
+    compact = " ".join(value.split())
+    return compact if len(compact) <= limit else f"{compact[:limit - 1]}…"
+
+
+def _decision_artifact_digest(artifacts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the smallest traceable artifact view needed for the next decision.
+
+    Full artifacts remain in the A2A payload and final result. The orchestration
+    LLM receives only the prior Team conclusion, its source-boundary evidence,
+    and the next input/action, preventing nested tool payloads from growing on
+    every ReAct turn.
+    """
+    digest: list[dict[str, Any]] = []
+    remaining = MAX_DECISION_ARTIFACT_CHARS
+    for record in artifacts:
+        if not isinstance(record, dict) or remaining <= 0:
+            break
+        artifact = record.get("artifact")
+        source = artifact if isinstance(artifact, dict) else {}
+        decision = record.get("orchestration")
+        decision_source = decision if isinstance(decision, dict) else {}
+        fields: dict[str, str] = {}
+        for name in ("summary", "finding", "evidence", "next_action", "next_input"):
+            text = _truncate_decision_text(source.get(name))
+            if text:
+                fields[name] = text
+        if not fields:
+            text = _truncate_decision_text(source.get("chat_summary"))
+            if text:
+                fields["chat_summary"] = text
+        purpose = _truncate_decision_text(decision_source.get("purpose"))
+        reason = _truncate_decision_text(decision_source.get("reason"))
+        item: dict[str, Any] = {
+            "step": record.get("step"),
+            "producer": record.get("producer"),
+            "decision": {
+                key: value
+                for key, value in {"purpose": purpose, "reason": reason}.items()
+                if value
+            },
+            "conclusion": fields,
+        }
+        encoded = json.dumps(item, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded) > remaining:
+            break
+        digest.append(item)
+        remaining -= len(encoded)
+    return digest
 
 
 def _normalize_conversation_history(
@@ -221,6 +281,8 @@ def _parse_observation(raw: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for field in _OBSERVATION_FIELDS:
         entries = value.get(field)
+        if isinstance(entries, str) and entries.strip():
+            entries = [entries]
         if not isinstance(entries, list) or any(
             not isinstance(entry, str) or not entry.strip() for entry in entries
         ):
@@ -284,8 +346,24 @@ def _retry_decision_display_fields(
 def _retry_observation_summary(
     settings: Settings, messages: list[dict[str, str]], raw: str
 ) -> dict[str, Any]:
-    """Repair only a missing observation display summary, once."""
-    observation = _parse_observation(raw)
+    """Repair one malformed or incomplete public Observation without new evidence."""
+    try:
+        observation = _parse_observation(raw)
+    except (RuntimeError, TypeError):
+        retry_raw = chat_text(
+            settings,
+            [
+                *messages,
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": get_prompt(
+                        "orchestration.observation_contract_retry_user"
+                    ),
+                },
+            ],
+        )
+        observation = _parse_observation(retry_raw)
     if isinstance(observation.get("chat_summary"), str):
         return observation
     try:
@@ -368,7 +446,7 @@ def _request_human_approval_if_explicit(
         "orchestration.human_approval_decision_user",
         request=request,
         decision=json.dumps(decision, ensure_ascii=False),
-        artifacts=json.dumps(artifacts, ensure_ascii=False),
+        artifacts=json.dumps(_decision_artifact_digest(artifacts), ensure_ascii=False),
         grounding=json.dumps(grounding, ensure_ascii=False),
         conversation_history=json.dumps(
             _normalize_conversation_history(conversation_history), ensure_ascii=False
@@ -419,6 +497,7 @@ def _orchestration_observation(
     cards: dict[str, AgentCard],
     grounding: dict[str, Any],
     conversation_history: list[dict[str, Any]] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> dict[str, Any]:
     """Generate the public Observe phase before the next orchestration action."""
     available = [
@@ -426,11 +505,11 @@ def _orchestration_observation(
         for agent_id, card in cards.items()
     ]
     prompt = render_prompt(
-        "orchestration.observation_user",
+        f"{prompt_namespace}.observation_user",
         request=request,
         grounding=json.dumps(grounding, ensure_ascii=False),
         available=json.dumps(available, ensure_ascii=False),
-        artifacts=json.dumps(artifacts, ensure_ascii=False),
+        artifacts=json.dumps(_decision_artifact_digest(artifacts), ensure_ascii=False),
         conversation_history=json.dumps(
             _normalize_conversation_history(conversation_history), ensure_ascii=False
         ),
@@ -438,7 +517,7 @@ def _orchestration_observation(
     messages = [
         {
             "role": "system",
-            "content": get_prompt("orchestration.observation_system"),
+            "content": get_prompt(f"{prompt_namespace}.observation_system"),
         },
         {"role": "user", "content": prompt},
     ]
@@ -455,37 +534,48 @@ def _orchestrator_turn(
     on_human_approval: Callable[[dict[str, Any]], None] | None = None,
     observation: dict[str, list[str]] | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
+    prompt_namespace: str = "orchestration",
+    handoff_budget_remaining: int = MAX_HANDOFFS_PER_REQUEST,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Let the model optionally search manuals before one orchestration decision."""
+    """Make one bounded decision while preserving evidence and handoff quality."""
     available = [
         {"agent_id": agent_id, "name": card.name, "description": card.description}
         for agent_id, card in cards.items()
     ]
     grounding_context = grounding or no_grounding_requested()
     prompt = render_prompt(
-        "orchestration.decision_user",
+        f"{prompt_namespace}.decision_user",
         available=json.dumps(available, ensure_ascii=False),
         observation=json.dumps(observation or {}, ensure_ascii=False),
         grounding=json.dumps(grounding_context, ensure_ascii=False),
         request=request,
-        artifacts=json.dumps(artifacts, ensure_ascii=False),
+        artifacts=json.dumps(_decision_artifact_digest(artifacts), ensure_ascii=False),
         conversation_history=json.dumps(
             _normalize_conversation_history(conversation_history), ensure_ascii=False
         ),
+        handoff_budget_remaining=max(0, handoff_budget_remaining),
     )
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
-            "content": get_prompt("orchestration.decision_system"),
+            "content": get_prompt(f"{prompt_namespace}.decision_system"),
         },
         {"role": "user", "content": prompt},
     ]
     # A human-review draft is deliberately absent from the first decision.  The
     # first turn establishes the request mode and evidence record; otherwise an
     # explanatory answer can become a self-justifying approval request.
-    orchestration_tools = [manual_search_tool()]
-    response = chat_tool_completion(settings, messages, orchestration_tools)
-    calls = _tool_calls(response)
+    manual_search_allowed = (
+        len(grounding_context["searches"]) < MAX_MANUAL_SEARCHES_PER_REQUEST
+    )
+    orchestration_tools = [manual_search_tool()] if manual_search_allowed else []
+    response = chat_tool_completion(
+        settings,
+        messages,
+        orchestration_tools,
+        tool_choice="auto" if manual_search_allowed else "none",
+    )
+    calls = _tool_calls(response)[:MAX_TOOL_CALLS_PER_DECISION]
     if not calls:
         raw = str(_field(_response_message(response), "content", "") or "")
         decision = _retry_decision_display_fields(
@@ -604,9 +694,12 @@ def _orchestrator_decision(
     artifacts: list[dict[str, Any]],
     cards: dict[str, AgentCard],
     grounding: dict[str, Any] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> dict[str, Any]:
     """Return only the decision for callers that do not need tool-event details."""
-    return _orchestrator_turn(settings, request, artifacts, cards, grounding)[0]
+    return _orchestrator_turn(
+        settings, request, artifacts, cards, grounding, prompt_namespace=prompt_namespace
+    )[0]
 
 
 async def _run_async(
@@ -615,6 +708,7 @@ async def _run_async(
     urls: dict[str, str],
     emit: Callable[[dict[str, Any]], Awaitable[None]] | None,
     conversation_history: list[dict[str, Any]] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> dict[str, Any]:
     context_id, cards = str(uuid4()), await discover_cards(urls)
     artifacts: list[dict[str, Any]] = []
@@ -652,7 +746,7 @@ async def _run_async(
                 },
             }
         )
-    for step in range(8):
+    for step in range(MAX_ORCHESTRATION_STEPS):
         if emit:
             await emit(
                 {
@@ -669,6 +763,7 @@ async def _run_async(
             cards,
             grounding,
             history,
+            prompt_namespace,
         )
         observation_record = {"step": step + 1, "observation": observation}
         observations.append(observation_record)
@@ -703,6 +798,8 @@ async def _run_async(
             emit_human_approval_event,
             observation,
             history,
+            prompt_namespace,
+            MAX_HANDOFFS_PER_REQUEST - len(artifacts),
         )
         for search in grounding["searches"][prior_search_count:]:
             observation = search["result"]
@@ -826,6 +923,12 @@ async def _run_async(
             agent_id: message_to_dict(card) for agent_id, card in cards.items()
         },
         "execution_boundary": EXECUTION_BOUNDARY,
+        "performance_limits": {
+            "max_handoffs": MAX_HANDOFFS_PER_REQUEST,
+            "max_orchestration_steps": MAX_ORCHESTRATION_STEPS,
+            "max_manual_searches": MAX_MANUAL_SEARCHES_PER_REQUEST,
+            "max_tool_calls_per_decision": MAX_TOOL_CALLS_PER_DECISION,
+        },
     }
 
 
@@ -834,6 +937,7 @@ def run_handoff(
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> dict[str, Any]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -844,6 +948,7 @@ def run_handoff(
             resolve_agent_urls(agent_urls),
             None,
             conversation_history,
+            prompt_namespace,
         )
     )
 
@@ -853,6 +958,7 @@ def run_handoff_stream(
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
     conversation_history: list[dict[str, Any]] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> Iterator[dict[str, Any]]:
     if not isinstance(request, str) or not request.strip():
         raise ValueError("request는 비어 있지 않은 문자열이어야 합니다.")
@@ -866,6 +972,7 @@ def run_handoff_stream(
             _run_async(
                 request.strip(), settings or load_settings(), urls, emit,
                 conversation_history,
+                prompt_namespace,
             )
         )
 
@@ -885,6 +992,7 @@ def run_handoff_steps(
     request: str = DEFAULT_REQUEST,
     settings: Settings | None = None,
     agent_urls: dict[str, str] | None = None,
+    prompt_namespace: str = "orchestration",
 ) -> Iterator[dict[str, Any]]:
     """Yield JSON-friendly A2A teaching steps from the streamed handoff.
 
@@ -894,7 +1002,11 @@ def run_handoff_steps(
     asynchronous; this adapter only exposes its public evidence in small,
     notebook-friendly units.
     """
-    event_stream = iter(run_handoff_stream(request, settings, agent_urls))
+    event_stream = iter(
+        run_handoff_stream(
+            request, settings, agent_urls, prompt_namespace=prompt_namespace
+        )
+    )
     for event in event_stream:
         event_type = event["type"]
         if event_type == "field_handoff_received":

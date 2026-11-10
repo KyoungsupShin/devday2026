@@ -218,11 +218,32 @@ def _json_object(
             result["tool_calls"] = tool_audit
         return result
     except (json.JSONDecodeError, TypeError) as error:
-        # A malformed model response must fail visibly. Retrying with a new prompt
-        # changes the LLM-driven flow and would act as a fallback decision path.
-        raise RuntimeError(
-            f"{role}의 LLM 응답이 유효한 JSON 객체가 아닙니다."
-        ) from error
+        retry_messages = [
+            *messages,
+            {"role": "assistant", "content": raw},
+            {
+                "role": "user",
+                "content": get_prompt("executor.json_contract_retry_user"),
+            },
+        ]
+        try:
+            retry_raw = (
+                _response_content(
+                    chat_tool_completion(
+                        settings, retry_messages, tool_schemas, tool_choice="none"
+                    )
+                )
+                if tool_schemas
+                else chat_text(settings, retry_messages)
+            )
+            result = parse(retry_raw)
+        except (json.JSONDecodeError, TypeError) as retry_error:
+            raise RuntimeError(
+                f"{role}의 LLM 응답이 유효한 JSON 객체가 아닙니다."
+            ) from retry_error
+        if tool_audit:
+            result["tool_calls"] = tool_audit
+        return result
 
 
 def _field(value: Any, name: str, default: Any = None) -> Any:
@@ -373,6 +394,18 @@ def _plan_delegations(
         contract,
     )
     selected = _valid_delegations(plan, available_subagents)
+    if selected is None:
+        plan = _json_object(
+            settings,
+            team,
+            f"{team['agent_label']} delegation planner",
+            {
+                **planning_context,
+                "previous_invalid_plan": plan,
+            },
+            f"{contract}\n\n{get_prompt('executor.delegation_contract_retry')}",
+        )
+        selected = _valid_delegations(plan, available_subagents)
     if selected is None:
         raise RuntimeError(
             "LLM delegation planner는 최소 한 명의 유효한 팀 sub-agent를 선택해야 합니다."
